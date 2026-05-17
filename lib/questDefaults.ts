@@ -40,9 +40,9 @@ export const difficultyOptions: (DifficultyOption & { icon: string })[] = [
  */
 export type ActivityPreset = {
   label: string;       // shown on the chip
-  activity: string;    // QuestData.activity
-  title: string;       // QuestData.title (auto-suggested)
-  reward: string;      // QuestData.reward (auto-suggested)
+  activity: string;    // QuestOption.activity
+  title: string;       // QuestOption.title (auto-suggested)
+  reward: string;      // QuestOption.reward (auto-suggested)
   icon: string;
 };
 
@@ -111,18 +111,18 @@ export const themeOptions: ThemeOption[] = [
   },
 ];
 
-export function makeDefaultQuestData(): QuestData {
+/**
+ * A single QuestOption preset matching the canonical "Great Ramen
+ * Expedition" example. Used as the starter option on /create.
+ */
+export function makeDefaultQuestOption(): QuestOption {
   return {
     title: activityPresets[0].title,
-    recipientName: "",
-    senderName: "A friend",
     activity: activityPresets[0].activity,
     dateTimeText: datePresets[2],
     reward: activityPresets[0].reward,
-    difficulty: "cozy",
     message: messageTemplates[0].text,
-    theme: "tavern",
-    createdAt: new Date().toISOString(),
+    difficulty: "cozy",
   };
 }
 
@@ -130,15 +130,9 @@ export function makeDefaultQuestBundle(): QuestBundle {
   return {
     recipientName: "",
     senderName: "A friend",
-    message: messageTemplates[0].text,
     theme: "tavern",
-    difficulty: "cozy",
-    dateTimeText: datePresets[2],
-    reward: activityPresets[0].reward,
     createdAt: new Date().toISOString(),
-    options: [
-      { title: activityPresets[0].title, activity: activityPresets[0].activity },
-    ],
+    options: [makeDefaultQuestOption()],
   };
 }
 
@@ -152,13 +146,13 @@ export function bundleToQuestData(
   return {
     title: option.title,
     activity: option.activity,
+    dateTimeText: option.dateTimeText,
+    reward: option.reward,
+    message: option.message,
+    difficulty: option.difficulty,
     recipientName: bundle.recipientName,
     senderName: bundle.senderName,
-    message: bundle.message,
     theme: bundle.theme,
-    difficulty: bundle.difficulty,
-    dateTimeText: bundle.dateTimeText,
-    reward: bundle.reward,
     createdAt: bundle.createdAt,
   };
 }

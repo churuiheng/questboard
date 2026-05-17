@@ -1,6 +1,6 @@
 "use client";
 
-import type { QuestBundle } from "@/types/quest";
+import type { QuestBundle, QuestOption } from "@/types/quest";
 
 /**
  * Tiny draft-persistence layer for the /create form.
@@ -11,9 +11,14 @@ import type { QuestBundle } from "@/types/quest";
  *
  * Everything is best-effort — private mode, quota errors, JSON parse
  * failures all degrade silently. The form keeps working either way.
+ *
+ * The storage key is versioned. When the bundle shape changes in a
+ * non-backward-compatible way (e.g. moving a field from shared to
+ * per-option), bump the version suffix — old drafts then silently
+ * become unreadable rather than crashing the form with missing fields.
  */
 
-const STORAGE_KEY = "questboard:draft";
+const STORAGE_KEY = "questboard:draft:v2";
 
 export type DraftEnvelope = {
   bundle: QuestBundle;
@@ -41,9 +46,9 @@ export function saveDraft(bundle: QuestBundle): void {
 
 /**
  * Read the most-recent draft, if any. Returns null if there's no draft
- * stored, the payload is malformed, or the bundle is just a brand-new
- * default (no actual user input yet — we don't surface "Draft restored"
- * for those).
+ * stored, the payload is malformed, the bundle shape doesn't match
+ * what the current code expects (schema migration), or the bundle is
+ * just a brand-new default (no actual user input yet).
  */
 export function loadDraft(): DraftEnvelope | null {
   if (!isBrowser()) return null;
@@ -52,6 +57,7 @@ export function loadDraft(): DraftEnvelope | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as DraftEnvelope;
     if (!parsed?.bundle || typeof parsed.savedAt !== "string") return null;
+    if (!isValidBundleShape(parsed.bundle)) return null;
     return parsed;
   } catch {
     return null;
@@ -91,11 +97,40 @@ export function formatSavedAt(savedAt: string): string {
  * once the user has touched at least one user-meaningful field.
  */
 export function isDraftWorthRestoring(bundle: QuestBundle): boolean {
+  if (!isValidBundleShape(bundle)) return false;
   return (
     bundle.recipientName.trim().length > 0 ||
     bundle.options.length > 1 ||
     bundle.options.some(
       (opt) => opt.title.trim() !== "" && opt.activity.trim() !== "",
     )
+  );
+}
+
+/**
+ * Runtime shape guard. Catches drafts that were saved under an older
+ * schema (e.g. before per-option fields) and rejects them so the form
+ * never reads a missing property.
+ */
+function isValidBundleShape(bundle: unknown): bundle is QuestBundle {
+  if (!bundle || typeof bundle !== "object") return false;
+  const b = bundle as Record<string, unknown>;
+  if (typeof b.recipientName !== "string") return false;
+  if (typeof b.senderName !== "string") return false;
+  if (typeof b.createdAt !== "string") return false;
+  if (!Array.isArray(b.options) || b.options.length === 0) return false;
+  return b.options.every(isValidOptionShape);
+}
+
+function isValidOptionShape(option: unknown): option is QuestOption {
+  if (!option || typeof option !== "object") return false;
+  const o = option as Record<string, unknown>;
+  return (
+    typeof o.title === "string" &&
+    typeof o.activity === "string" &&
+    typeof o.dateTimeText === "string" &&
+    typeof o.reward === "string" &&
+    typeof o.message === "string" &&
+    typeof o.difficulty === "string"
   );
 }

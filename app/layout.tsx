@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PageBackground } from "@/components/ui/PageBackground";
 import "./globals.css";
 
 /**
@@ -60,7 +61,10 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <PageBackground />
+        {children}
+      </body>
     </html>
   );
 }

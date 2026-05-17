@@ -1,28 +1,36 @@
 // Core data model for a Quest Invite.
 // `QuestBundle` is the shareable unit — one URL holds one bundle, which
 // in turn may contain 1–3 `QuestOption` alternatives the recipient picks
-// between. Fields like `dateTimeText`, `reward`, `difficulty` and the
-// personal `message` are shared across options.
+// between. Each option is fully self-contained (title, activity, when,
+// reward, message, difficulty), so the sender can offer "Ramen Friday"
+// alongside "Hike Saturday" with totally different vibes.
+//
+// Only recipient/sender identity and visual theme are shared across the
+// whole bundle.
 
 export type QuestDifficulty = "cozy" | "normal" | "legendary" | "secret";
 
 export type QuestTheme = "tavern" | "forest" | "pixel";
 
-/** Per-option fields. Each scroll on the board is one of these. */
+/**
+ * Per-option fields. Each scroll on the board is one of these.
+ * Every option carries its own title, activity, when, reward, message,
+ * and difficulty.
+ */
 export type QuestOption = {
   title: string;
   activity: string;
+  dateTimeText: string;
+  reward: string;
+  message: string;
+  difficulty: QuestDifficulty;
 };
 
 /** The full shareable unit, encoded into the `?q=` URL parameter. */
 export type QuestBundle = {
   recipientName: string;
   senderName: string;
-  message: string;
   theme: QuestTheme;
-  difficulty: QuestDifficulty;
-  dateTimeText: string;
-  reward: string;
   createdAt: string;
   options: QuestOption[];
 };

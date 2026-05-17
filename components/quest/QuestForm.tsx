@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type {
   QuestBundle,
@@ -10,13 +9,14 @@ import type {
 import {
   MAX_OPTIONS,
   activityPresets,
-  datePresets,
+  difficultyOptions,
   fieldLimits,
+  makeDefaultQuestOption,
   messageTemplates,
   rewardPresets,
 } from "@/lib/questDefaults";
-import { Field, TextArea, TextInput } from "@/components/ui/Field";
-import { DifficultyPicker } from "@/components/quest/DifficultyPicker";
+import { Field, Select, TextArea, TextInput } from "@/components/ui/Field";
+import { CalendarDropdown } from "@/components/quest/CalendarDropdown";
 
 type Props = {
   value: QuestBundle;
@@ -24,35 +24,25 @@ type Props = {
 };
 
 /**
- * Chip-heavy bundle editor. Shared fields live at the top; the list of
- * options below lets the sender stack 1–3 alternatives. Each option is
- * just an activity chip selection plus an auto-generated title.
+ * Bundle editor. The only fields shared across the whole bundle are
+ * recipient + sender + theme. Every other piece — title, activity,
+ * when, reward, message, difficulty — lives on each option, so a
+ * sender can offer "Cozy ramen Friday" alongside "Legendary hike
+ * Saturday" with totally different vibes per scroll.
+ *
+ * Layout per option (top → bottom):
+ *   1. Title         — plain text input
+ *   2. Vibe          — dropdown (compact, sits high so users pick a
+ *                      tone before describing the quest)
+ *   3. The quest     — text input + ↻ randomize square
+ *   4. When          — text input + calendar dropdown (preset chips
+ *                      + native datetime live inside the popover)
+ *   5. Reward        — text input + ↻ randomize square
+ *   6. Message       — textarea + ↻ randomize square
  */
 export function QuestForm({ value, onChange }: Props) {
-  // Track which keys the user has typed into directly, so activity
-  // chips don't trample over custom titles or rewards.
-  const [manuallyEditedShared, setManuallyEditedShared] = useState<
-    Set<keyof QuestBundle>
-  >(() => new Set());
-  // Per-option, track which option indices have user-edited titles.
-  const [manualTitleByIndex, setManualTitleByIndex] = useState<Set<number>>(
-    () => new Set(),
-  );
-
-  function patchShared<K extends keyof QuestBundle>(
-    key: K,
-    next: QuestBundle[K],
-    options?: { manual?: boolean },
-  ) {
-    if (options?.manual) {
-      setManuallyEditedShared((prev) => {
-        if (prev.has(key)) return prev;
-        const copy = new Set(prev);
-        copy.add(key);
-        return copy;
-      });
-    }
-    onChange({ ...value, [key]: next });
+  function patchBundle(next: Partial<QuestBundle>) {
+    onChange({ ...value, ...next });
   }
 
   function patchOption(index: number, partial: Partial<QuestOption>) {
@@ -62,37 +52,11 @@ export function QuestForm({ value, onChange }: Props) {
     onChange({ ...value, options: nextOptions });
   }
 
-  function pickActivityForOption(
-    index: number,
-    preset: (typeof activityPresets)[number],
-  ) {
-    const nextOptions = value.options.map((opt, i) => {
-      if (i !== index) return opt;
-      return {
-        ...opt,
-        activity: preset.activity,
-        title: manualTitleByIndex.has(i) ? opt.title : preset.title,
-      };
-    });
-    // Auto-fill the shared reward from the first option's activity, but
-    // only if the sender hasn't customized it.
-    const nextReward =
-      index === 0 && !manuallyEditedShared.has("reward")
-        ? preset.reward
-        : value.reward;
-    onChange({ ...value, options: nextOptions, reward: nextReward });
-  }
-
   function addOption() {
     if (value.options.length >= MAX_OPTIONS) return;
-    const nextPreset =
-      activityPresets[value.options.length % activityPresets.length];
     onChange({
       ...value,
-      options: [
-        ...value.options,
-        { title: nextPreset.title, activity: nextPreset.activity },
-      ],
+      options: [...value.options, makeDefaultQuestOption()],
     });
   }
 
@@ -102,18 +66,6 @@ export function QuestForm({ value, onChange }: Props) {
       ...value,
       options: value.options.filter((_, i) => i !== index),
     });
-    setManualTitleByIndex((prev) => {
-      if (!prev.has(index) && !Array.from(prev).some((i) => i > index)) {
-        return prev;
-      }
-      // Shift down indices above the removed one.
-      const next = new Set<number>();
-      prev.forEach((i) => {
-        if (i < index) next.add(i);
-        else if (i > index) next.add(i - 1);
-      });
-      return next;
-    });
   }
 
   return (
@@ -121,69 +73,33 @@ export function QuestForm({ value, onChange }: Props) {
       className="flex flex-col gap-4"
       onSubmit={(e) => e.preventDefault()}
     >
-      {/* WHO */}
-      <SectionCard label="Who's the quest for?">
+      {/* WHO — the one required text input */}
+      <SectionCard
+        label="Who is this quest for?"
+        hint={
+          value.recipientName.trim().length === 0 ? "Needed" : undefined
+        }
+      >
         <TextInput
+          id="quest-recipient-input"
           value={value.recipientName}
           maxLength={fieldLimits.recipientName}
           placeholder="Their name…"
-          onChange={(e) =>
-            patchShared("recipientName", e.target.value, { manual: true })
-          }
+          onChange={(e) => patchBundle({ recipientName: e.target.value })}
           className="text-lg"
           autoFocus
+          required
+          aria-required="true"
           aria-label="Recipient's name"
         />
         {value.recipientName.trim().length === 0 ? (
           <p className="mt-1.5 text-[11px] text-parchment/45">
-            Their name shows up at the bottom of the card.
+            Their name shows up on every scroll.
           </p>
         ) : null}
       </SectionCard>
 
-      {/* SHARED VIBE */}
-      <SectionCard label="The vibe">
-        <div className="flex flex-col gap-4">
-          <ChipRowLabel label="Difficulty">
-            <DifficultyPicker
-              value={value.difficulty}
-              onChange={(next: QuestDifficulty) =>
-                patchShared("difficulty", next)
-              }
-            />
-          </ChipRowLabel>
-
-          <ChipRowLabel label="When">
-            <div className="flex flex-wrap gap-1.5">
-              {datePresets.map((d) => (
-                <PillChip
-                  key={d}
-                  label={d}
-                  active={value.dateTimeText === d}
-                  onClick={() => patchShared("dateTimeText", d)}
-                />
-              ))}
-            </div>
-          </ChipRowLabel>
-
-          <ChipRowLabel label="Reward">
-            <div className="flex flex-wrap gap-1.5">
-              {rewardPresets.map((r) => (
-                <PillChip
-                  key={r}
-                  label={r}
-                  active={value.reward === r}
-                  onClick={() =>
-                    patchShared("reward", r, { manual: true })
-                  }
-                />
-              ))}
-            </div>
-          </ChipRowLabel>
-        </div>
-      </SectionCard>
-
-      {/* QUEST OPTIONS */}
+      {/* QUEST OPTIONS — each is a self-contained mini-editor */}
       <SectionCard
         label={
           value.options.length === 1
@@ -191,7 +107,7 @@ export function QuestForm({ value, onChange }: Props) {
             : `Quest options · ${value.options.length}`
         }
       >
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           <AnimatePresence initial={false}>
             {value.options.map((option, index) => (
               <motion.div
@@ -201,11 +117,13 @@ export function QuestForm({ value, onChange }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                className="rounded-xl border border-parchment/10 bg-ink/20 p-3"
+                className="flex flex-col gap-4 rounded-xl border border-parchment/10 bg-ink/20 p-4"
               >
-                <div className="mb-2 flex items-center justify-between">
+                <div className="flex items-center justify-between">
                   <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/70">
-                    Quest {value.options.length > 1 ? index + 1 : ""}
+                    {value.options.length > 1
+                      ? `Quest ${index + 1}`
+                      : "Quest details"}
                   </span>
                   {value.options.length > 1 ? (
                     <button
@@ -219,43 +137,130 @@ export function QuestForm({ value, onChange }: Props) {
                   ) : null}
                 </div>
 
-                <div className="flex flex-wrap gap-1.5">
-                  {activityPresets.map((preset) => (
-                    <IconChip
-                      key={preset.label}
-                      icon={preset.icon}
-                      label={preset.label}
-                      active={option.activity === preset.activity}
-                      onClick={() => pickActivityForOption(index, preset)}
-                    />
-                  ))}
-                </div>
+                {/* TITLE */}
+                <Field label="Title">
+                  <TextInput
+                    value={option.title}
+                    maxLength={fieldLimits.title}
+                    placeholder="The Great Ramen Expedition"
+                    onChange={(e) =>
+                      patchOption(index, { title: e.target.value })
+                    }
+                  />
+                </Field>
 
-                <p className="mt-2 text-[11px] text-parchment/55">
-                  Title:{" "}
-                  <span className="text-parchment/85">{option.title}</span>{" "}
-                  {manualTitleByIndex.has(index) ? (
-                    <button
-                      type="button"
+                {/* VIBE (difficulty) — moved up below title so the user
+                    picks a tone before sketching the quest itself. */}
+                <Field label="Vibe">
+                  <Select
+                    value={option.difficulty}
+                    onChange={(e) =>
+                      patchOption(index, {
+                        difficulty: e.target.value as QuestDifficulty,
+                      })
+                    }
+                    aria-label="Vibe"
+                  >
+                    {difficultyOptions.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label} — {d.blurb}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                {/* ACTIVITY — input + randomize square */}
+                <Field label="The quest">
+                  <InputWithAction>
+                    <TextInput
+                      value={option.activity}
+                      maxLength={fieldLimits.activity}
+                      placeholder="Ramen dinner at the cozy spot downtown"
+                      onChange={(e) =>
+                        patchOption(index, { activity: e.target.value })
+                      }
+                    />
+                    <RandomizeButton
+                      label="Randomize the quest"
                       onClick={() => {
-                        setManualTitleByIndex((prev) => {
-                          const next = new Set(prev);
-                          next.delete(index);
-                          return next;
-                        });
-                        const preset = activityPresets.find(
-                          (p) => p.activity === option.activity,
-                        );
-                        if (preset) patchOption(index, { title: preset.title });
+                        const preset = pickRandom(activityPresets, option.activity);
+                        patchOption(index, { activity: preset.activity });
                       }}
-                      className="ml-1 text-[10px] uppercase tracking-[0.18em] text-gold/70 hover:text-gold"
-                    >
-                      Reset to auto
-                    </button>
-                  ) : (
-                    <span className="text-parchment/35">· auto</span>
-                  )}
-                </p>
+                    />
+                  </InputWithAction>
+                </Field>
+
+                {/* WHEN — input + calendar dropdown (presets + native
+                    datetime live inside the popover) */}
+                <Field label="When">
+                  <InputWithAction>
+                    <TextInput
+                      value={option.dateTimeText}
+                      maxLength={fieldLimits.dateTimeText}
+                      placeholder="Friday night around 7"
+                      onChange={(e) =>
+                        patchOption(index, { dateTimeText: e.target.value })
+                      }
+                    />
+                    <CalendarDropdown
+                      value={option.dateTimeText}
+                      onPick={(formatted) =>
+                        patchOption(index, { dateTimeText: formatted })
+                      }
+                    />
+                  </InputWithAction>
+                </Field>
+
+                {/* REWARD — input + randomize square */}
+                <Field label="Reward">
+                  <InputWithAction>
+                    <TextInput
+                      value={option.reward}
+                      maxLength={fieldLimits.reward}
+                      placeholder="+50 Happiness · The best night out"
+                      onChange={(e) =>
+                        patchOption(index, { reward: e.target.value })
+                      }
+                    />
+                    <RandomizeButton
+                      label="Randomize the reward"
+                      onClick={() => {
+                        const next = pickRandomString(rewardPresets, option.reward);
+                        patchOption(index, { reward: next });
+                      }}
+                    />
+                  </InputWithAction>
+                </Field>
+
+                {/* MESSAGE — textarea + randomize square */}
+                <Field label="Message">
+                  <InputWithAction align="start">
+                    <div className="relative w-full">
+                      <TextArea
+                        value={option.message}
+                        maxLength={fieldLimits.message}
+                        placeholder="Write a short note for the recipient…"
+                        onChange={(e) =>
+                          patchOption(index, { message: e.target.value })
+                        }
+                      />
+                      <CharCounter
+                        current={option.message.length}
+                        max={fieldLimits.message}
+                      />
+                    </div>
+                    <RandomizeButton
+                      label="Randomize the message"
+                      onClick={() => {
+                        const next = pickRandomString(
+                          messageTemplates.map((t) => t.text),
+                          option.message,
+                        );
+                        patchOption(index, { message: next });
+                      }}
+                    />
+                  </InputWithAction>
+                </Field>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -285,91 +290,64 @@ export function QuestForm({ value, onChange }: Props) {
         </div>
       </SectionCard>
 
-      {/* MESSAGE */}
-      <SectionCard label="Your message">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-1.5">
-            {messageTemplates.map((t) => (
-              <PillChip
-                key={t.label}
-                label={t.label}
-                active={value.message === t.text}
-                onClick={() => patchShared("message", t.text)}
-              />
-            ))}
-          </div>
-          <div className="relative">
-            <TextArea
-              value={value.message}
-              maxLength={fieldLimits.message}
-              placeholder="Tap a template above, or write your own…"
-              onChange={(e) =>
-                patchShared("message", e.target.value, { manual: true })
-              }
-            />
-            <CharCounter
-              current={value.message.length}
-              max={fieldLimits.message}
-            />
-          </div>
-        </div>
-      </SectionCard>
-
-      {/* CUSTOMIZE */}
-      <CollapsibleCard label="Customize titles & sender">
+      {/* SENDER */}
+      <CollapsibleCard label="From — your name on the card">
         <Field label="From">
           <TextInput
             value={value.senderName}
             maxLength={fieldLimits.senderName}
             placeholder="A friend"
-            onChange={(e) =>
-              patchShared("senderName", e.target.value, { manual: true })
-            }
+            onChange={(e) => patchBundle({ senderName: e.target.value })}
           />
         </Field>
-
-        {value.options.map((option, index) => (
-          <Field
-            key={index}
-            label={`Title — Quest ${
-              value.options.length > 1 ? index + 1 : ""
-            }`}
-          >
-            <TextInput
-              value={option.title}
-              maxLength={fieldLimits.title}
-              placeholder="Auto-generated from the activity"
-              onChange={(e) => {
-                setManualTitleByIndex((prev) => {
-                  if (prev.has(index)) return prev;
-                  const next = new Set(prev);
-                  next.add(index);
-                  return next;
-                });
-                patchOption(index, { title: e.target.value });
-              }}
-            />
-          </Field>
-        ))}
       </CollapsibleCard>
     </form>
   );
+}
+
+/* ------------------------------------------------------------ helpers */
+
+/**
+ * Pick a random item from `presets` that isn't the current selection,
+ * so consecutive clicks of the randomize button always actually change
+ * the value (instead of occasionally re-picking the same one).
+ */
+function pickRandom<T extends { activity: string }>(presets: T[], current: string): T {
+  if (presets.length <= 1) return presets[0];
+  const others = presets.filter((p) => p.activity !== current);
+  return others[Math.floor(Math.random() * others.length)];
+}
+
+function pickRandomString(presets: string[], current: string): string {
+  if (presets.length <= 1) return presets[0];
+  const others = presets.filter((p) => p !== current);
+  return others[Math.floor(Math.random() * others.length)];
 }
 
 /* ------------------------------------------------------------ atoms */
 
 function SectionCard({
   label,
+  hint,
   children,
 }: {
   label: string;
+  /** Optional badge text rendered to the right of the label (e.g. "Needed"). */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-2xl border border-parchment/10 bg-ink/25 p-4 sm:p-5">
-      <h3 className="mb-3 font-display text-[11px] uppercase tracking-[0.28em] text-gold/75">
-        {label}
-      </h3>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="font-display text-[11px] uppercase tracking-[0.28em] text-gold/75">
+          {label}
+        </h3>
+        {hint ? (
+          <span className="rounded-full bg-ember/15 px-2 py-0.5 font-display text-[9px] uppercase tracking-[0.22em] text-ember">
+            {hint}
+          </span>
+        ) : null}
+      </div>
       {children}
     </section>
   );
@@ -395,80 +373,58 @@ function CollapsibleCard({
   );
 }
 
-function ChipRowLabel({
-  label,
+/**
+ * Layout helper for "input + action button" rows. The input grows; the
+ * button sits flush to its right. `align="start"` is for the textarea
+ * row so the button doesn't float to the center of a tall textarea.
+ */
+function InputWithAction({
   children,
+  align = "center",
 }: {
-  label: string;
   children: React.ReactNode;
+  align?: "center" | "start";
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[10px] uppercase tracking-[0.2em] text-parchment/45">
-        {label}
-      </span>
+    <div
+      className={
+        "flex w-full gap-2 " +
+        (align === "start" ? "items-start" : "items-center")
+      }
+    >
       {children}
     </div>
   );
 }
 
-function IconChip({
-  icon,
+/**
+ * Small square button that randomizes the field it sits beside.
+ *
+ * Visually deliberate: same height/width as the calendar trigger so the
+ * column of action buttons reads as a tidy vertical strip when scanning
+ * down the form. The ↻ character is a plain Unicode arrow (not an
+ * emoji), which keeps the form's no-icons aesthetic intact.
+ */
+function RandomizeButton({
   label,
-  active,
   onClick,
 }: {
-  icon: string;
+  /** Used for the aria-label and the tooltip on hover. */
   label: string;
-  active: boolean;
   onClick: () => void;
 }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.94, y: 0 }}
-      transition={{ type: "spring", stiffness: 340, damping: 22 }}
-      className={
-        "inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-medium ring-1 transition-[background-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 " +
-        (active
-          ? "bg-gold text-ink ring-gold-soft shadow-[0_4px_14px_-4px_rgba(230,179,82,0.55)]"
-          : "bg-ink/40 text-parchment/80 ring-parchment/15 hover:bg-ink/60 hover:text-parchment hover:ring-gold/40")
-      }
-      aria-pressed={active}
+      whileHover={{ y: -1 }}
+      whileTap={{ scale: 0.92, rotate: 90 }}
+      transition={{ type: "spring", stiffness: 340, damping: 20 }}
+      aria-label={label}
+      title={label}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-parchment/15 bg-ink/40 text-gold transition hover:border-gold/60 hover:bg-ink/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60"
     >
-      <span aria-hidden>{icon}</span>
-      {label}
-    </motion.button>
-  );
-}
-
-function PillChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.94, y: 0 }}
-      transition={{ type: "spring", stiffness: 340, damping: 22 }}
-      className={
-        "inline-flex min-h-[40px] items-center rounded-full px-3.5 py-2 text-xs font-medium ring-1 transition-[background-color,box-shadow,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 " +
-        (active
-          ? "bg-gold text-ink ring-gold-soft shadow-[0_4px_14px_-4px_rgba(230,179,82,0.55)]"
-          : "bg-ink/40 text-parchment/80 ring-parchment/15 hover:bg-ink/60 hover:text-parchment hover:ring-gold/40")
-      }
-      aria-pressed={active}
-    >
-      {label}
+      <span aria-hidden className="text-base leading-none">↻</span>
     </motion.button>
   );
 }

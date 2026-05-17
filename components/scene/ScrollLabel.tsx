@@ -22,19 +22,54 @@ function truncate(input: string, max: number): string {
 }
 
 /**
- * Renders the quest's text content directly onto the scroll. Uses Drei's
- * `<Text>` (Troika) so the glyphs stay crisp as the camera zooms.
+ * Pick a Drei `<Text>` fontSize that lets a title fit nicely on the
+ * parchment. Cinzel is wide, so short titles get a punchy display size
+ * and longer ones shrink to keep everything readable without
+ * truncating mid-word.
  *
- * Positions are tuned for the procedural scroll's 0.42 × 0.55 size; if
- * a custom note `.glb` is in use, the text floats roughly in the same
- * spot — usually still readable.
+ * Sizes were tuned against the 0.36-wide title block — at each step
+ * the title fits on at most two lines for plausible quest titles.
+ */
+function fitTitleSize(title: string): number {
+  const len = title.length;
+  if (len <= 14) return 0.04;
+  if (len <= 22) return 0.034;
+  if (len <= 32) return 0.028;
+  if (len <= 44) return 0.024;
+  return 0.021;
+}
+
+/**
+ * Minimal wireframe poster pinned to the tavern board. The scroll's job
+ * is to whisper enough to make the recipient curious — not to render
+ * the full quest card. The full card opens on click.
  *
- * Display font candidates live in `lib/fonts.ts` so the CSS @font-face
- * slots and the 3D Troika slot share one source of truth.
+ *   ┌─────────────────┐
+ *   │       ●         │  ← difficulty marker (tiny, top-center)
+ *   │                 │
+ *   │     TITLE       │  ← only readable text, centered
+ *   │      ✦          │  ← star divider
+ *   │                 │
+ *   │  ▆▆  ▆▆▆  ▆▆▆   │  ← 3 stat wireframes (reward tinted ember)
+ *   │                 │
+ *   └─────────────────┘
+ *
+ * Everything else from the QuestCard (Quest Notice eyebrow, "for X"
+ * line, message banner) is intentionally omitted: at this scale it just
+ * reads as noise, and the overlay already shows all of it in full.
  */
 export function ScrollLabel({ quest }: { quest: QuestData }) {
-  const title = truncate(quest.title.trim() || "An Untitled Quest", 28);
-  const activity = truncate(quest.activity.trim() || "A side quest", 24);
+  // We avoid truncating: long titles just get a smaller font (see
+  // `fitTitleSize`) and may wrap to two lines, which still reads cleanly
+  // because the title is the only text on the scroll. A hard cap at 60
+  // chars stops a worst-case "paste the whole story" title from
+  // running off the parchment, but anything reasonable comes through
+  // intact.
+  const title = truncate(quest.title.trim() || "An Untitled Quest", 60);
+  const titleFontSize = fitTitleSize(title);
+  const activity = quest.activity.trim() || "an activity";
+  const when = quest.dateTimeText.trim() || "when";
+  const reward = quest.reward.trim() || "a reward";
   const difficultyColor = DIFFICULTY_STRIPE_COLOR[quest.difficulty];
 
   const fontUrl = useFirstPresentUrl(DISPLAY_FONT_CANDIDATES);
@@ -45,7 +80,7 @@ export function ScrollLabel({ quest }: { quest: QuestData }) {
 
   return (
     <group>
-      {/* Aged underlay — a slightly larger tan plane peeking from behind. */}
+      {/* Aged underlay peeking from behind. */}
       <mesh position={[0.012, -0.014, Z - 0.002]} renderOrder={ORDER - 2}>
         <planeGeometry args={[PARCH_W + 0.02, PARCH_H + 0.024]} />
         <meshBasicMaterial
@@ -56,28 +91,13 @@ export function ScrollLabel({ quest }: { quest: QuestData }) {
         />
       </mesh>
 
-      {/* Soft drop shadow behind the parchment. */}
+      {/* Soft drop shadow. */}
       <mesh position={[0.022, -0.025, Z - 0.003]} renderOrder={ORDER - 3}>
         <planeGeometry args={[PARCH_W + 0.04, PARCH_H + 0.05]} />
-        <meshBasicMaterial
-          color="#1a0e05"
-          transparent
-          opacity={0.4}
-          depthTest={false}
-        />
+        <meshBasicMaterial color="#1a0e05" transparent opacity={0.4} depthTest={false} />
       </mesh>
 
-      {/* Top + bottom gold rule, like a quest-poster border. */}
-      <mesh position={[0, 0.245, Z]} renderOrder={ORDER}>
-        <planeGeometry args={[PARCH_W * 0.78, 0.004]} />
-        <meshBasicMaterial color={GOLD} depthTest={false} />
-      </mesh>
-      <mesh position={[0, -0.245, Z]} renderOrder={ORDER}>
-        <planeGeometry args={[PARCH_W * 0.78, 0.004]} />
-        <meshBasicMaterial color={GOLD} depthTest={false} />
-      </mesh>
-
-      {/* Brass nail heads at each parchment corner. */}
+      {/* Brass nail heads at each corner. */}
       {(
         [
           [-PARCH_W / 2 + 0.024, PARCH_H / 2 - 0.024],
@@ -89,17 +109,22 @@ export function ScrollLabel({ quest }: { quest: QuestData }) {
         <BrassNail key={i} x={x} y={y} z={Z} order={ORDER} />
       ))}
 
-      {/* Difficulty marker — small gold-ringed colored dot just below the top rule. */}
-      <DifficultyMarker color={difficultyColor} z={Z} order={ORDER} />
+      {/* Difficulty marker — small dot near the top, centered. */}
+      <DifficultyMarker color={difficultyColor} position={[0, 0.185, Z]} order={ORDER} />
 
-      {/* Title — vertically centered, bold so it carries the composition. */}
+      {/* Title — the only readable element. Centered. Font size scales
+          with title length (see `fitTitleSize`). Allowed to wrap to two
+          lines for long titles; `anchorY="middle"` keeps it vertically
+          balanced around its position no matter how many lines. */}
       <Text
-        position={[0, 0, Z]}
+        position={[0, 0.075, Z]}
         renderOrder={ORDER}
         font={fontUrl}
-        fontSize={0.052}
+        fontSize={titleFontSize}
         fontWeight={700}
-        maxWidth={0.37}
+        maxWidth={0.36}
+        lineHeight={1.05}
+        textAlign="center"
         anchorX="center"
         anchorY="middle"
         color={INK}
@@ -109,12 +134,12 @@ export function ScrollLabel({ quest }: { quest: QuestData }) {
         {title}
       </Text>
 
-      {/* Minimalist divider — just a centered star, sits beneath the title. */}
+      {/* Star divider — sits beneath the title. */}
       <Text
-        position={[0, -0.115, Z]}
+        position={[0, -0.01, Z]}
         renderOrder={ORDER}
         font={fontUrl}
-        fontSize={0.022}
+        fontSize={0.024}
         color={GOLD}
         anchorX="center"
         anchorY="middle"
@@ -124,38 +149,61 @@ export function ScrollLabel({ quest }: { quest: QuestData }) {
         ✦
       </Text>
 
-      {/* Activity — rendered as solid ink-redacted blocks. */}
+      {/* Three stat wireframes — single row, evenly spaced. */}
       <MysteryBlocks
         text={activity}
-        position={[0, -0.18, Z]}
+        position={[-0.115, -0.115, Z]}
         color={INK}
-        opacity={0.78}
+        opacity={0.7}
         renderOrder={ORDER}
+        charWidth={0.0055}
+        baseHeight={0.011}
+        wordGap={0.012}
+      />
+      <MysteryBlocks
+        text={when}
+        position={[0, -0.115, Z]}
+        color={INK}
+        opacity={0.7}
+        renderOrder={ORDER}
+        charWidth={0.0055}
+        baseHeight={0.011}
+        wordGap={0.012}
+      />
+      <MysteryBlocks
+        text={reward}
+        position={[0.115, -0.115, Z]}
+        color={INK}
+        opacity={0.7}
+        renderOrder={ORDER}
+        charWidth={0.0055}
+        baseHeight={0.011}
+        wordGap={0.012}
       />
     </group>
   );
 }
 
-/** Small wax-pin badge at the top of the scroll. */
+/** Small wax-pin badge — gold ring with a colored center dot. */
 function DifficultyMarker({
   color,
-  z,
+  position,
   order,
 }: {
   color: string;
-  z: number;
+  position: [number, number, number];
   order: number;
 }) {
   return (
-    <group position={[0, 0.225, z]}>
+    <group position={position}>
       {/* Outer gold ring */}
       <mesh renderOrder={order}>
-        <ringGeometry args={[0.016, 0.024, 32]} />
+        <ringGeometry args={[0.014, 0.022, 32]} />
         <meshBasicMaterial color={GOLD} depthTest={false} />
       </mesh>
       {/* Inner colored dot */}
       <mesh renderOrder={order + 1}>
-        <circleGeometry args={[0.014, 24]} />
+        <circleGeometry args={[0.012, 24]} />
         <meshBasicMaterial color={color} depthTest={false} />
       </mesh>
     </group>
@@ -176,17 +224,14 @@ function BrassNail({
 }) {
   return (
     <group position={[x, y, z]}>
-      {/* Iron rim / shadow */}
       <mesh renderOrder={order}>
         <circleGeometry args={[0.0085, 20]} />
         <meshBasicMaterial color="#1a0e05" depthTest={false} />
       </mesh>
-      {/* Brass body */}
       <mesh position={[0, 0, 0.0005]} renderOrder={order + 1}>
         <circleGeometry args={[0.0065, 20]} />
         <meshBasicMaterial color={GOLD} depthTest={false} />
       </mesh>
-      {/* Subtle highlight */}
       <mesh position={[-0.002, 0.002, 0.001]} renderOrder={order + 2}>
         <circleGeometry args={[0.002, 12]} />
         <meshBasicMaterial color="#f0d28a" depthTest={false} />
@@ -196,9 +241,10 @@ function BrassNail({
 }
 
 /**
- * Renders a string as a row of small rectangles — one per "word" — sized
- * proportional to that word's length. Looks like loading-skeleton bars or
- * redacted text. Heights jitter slightly per word for an organic feel.
+ * Renders a string as a row of small rectangles — one segment per
+ * sub-piece of a word — sized proportional to the word's length. Looks
+ * like loading-skeleton bars or redacted text. Heights jitter slightly
+ * per word for an organic feel. Always center-anchored at `position`.
  */
 function MysteryBlocks({
   text,
@@ -250,7 +296,7 @@ function MysteryBlocks({
       return {
         wordIndex,
         segIndex,
-        w: Math.max(0.018, charCount * charWidth),
+        w: Math.max(0.012, charCount * charWidth),
         h: baseHeight * (0.85 + heightJitter),
         alphaJitter: ((seed + segIndex * 3) % 7) / 30,
       };

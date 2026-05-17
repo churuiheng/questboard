@@ -60,6 +60,30 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
     window.open(link, "_blank", "noopener,noreferrer");
   }
 
+  /**
+   * Recipient is required. When the user hits "Ready the link" with the
+   * field empty, redirect their attention to the input instead of
+   * generating a recipient-less link. Smooth scroll + focus + a brief
+   * ember highlight so the field obviously says "fill me in".
+   */
+  function handleReady() {
+    if (recipientMissing) {
+      const input = document.getElementById(
+        "quest-recipient-input",
+      ) as HTMLInputElement | null;
+      if (input) {
+        input.scrollIntoView({ behavior: "smooth", block: "center" });
+        input.focus({ preventScroll: true });
+        input.classList.add("ring-2", "ring-ember/70");
+        window.setTimeout(() => {
+          input.classList.remove("ring-2", "ring-ember/70");
+        }, 1600);
+      }
+      return;
+    }
+    setRevealed(true);
+  }
+
   // Warn (but don't block) if the encoded data is uncomfortably long for
   // some messaging apps that truncate URLs.
   const tooLong = encoded.length > 1600;
@@ -93,7 +117,15 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
           </p>
         </div>
         {!revealed ? (
-          <Button onClick={() => setRevealed(true)}>Ready the link</Button>
+          <Button
+            onClick={handleReady}
+            variant={recipientMissing ? "secondary" : "primary"}
+            aria-describedby={
+              recipientMissing ? "recipient-required-hint" : undefined
+            }
+          >
+            {recipientMissing ? "Add a recipient first" : "Ready the link"}
+          </Button>
         ) : (
           <Button
             onClick={handleCopy}
@@ -109,6 +141,7 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
         {recipientMissing && !revealed ? (
           <motion.div
             key="recipient-nudge"
+            id="recipient-required-hint"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}

@@ -5,9 +5,9 @@ import { difficultyOptions } from "@/lib/questDefaults";
 import type { QuestDifficulty } from "@/types/quest";
 
 /**
- * 2×2 grid of difficulty cards. Each shows an icon, label, and a
- * one-line blurb. The selected one lifts slightly, gets a gold ring,
- * and a small ✦ marker in the corner so the choice reads at a glance.
+ * 2×2 grid of difficulty cards. Each shows a label and a one-line
+ * blurb. The selected one lifts slightly and gains a gold ring + the
+ * label shifts to gold so the choice reads at a glance.
  */
 export function DifficultyPicker({
   value,
@@ -36,32 +36,14 @@ export function DifficultyPicker({
             }
             aria-pressed={isActive}
           >
-            {/* Gold corner marker for the selected card */}
-            {isActive ? (
-              <motion.span
-                aria-hidden
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 360, damping: 18 }}
-                className="absolute right-2 top-2 text-[10px] text-gold"
-              >
-                ✦
-              </motion.span>
-            ) : null}
-
-            <div className="flex items-center gap-2">
-              <span className="text-base leading-none" aria-hidden>
-                {option.icon}
-              </span>
-              <span
-                className={
-                  "font-display text-xs uppercase tracking-[0.18em] " +
-                  (isActive ? "text-gold-soft" : "text-parchment")
-                }
-              >
-                {option.label}
-              </span>
-            </div>
+            <span
+              className={
+                "font-display text-xs uppercase tracking-[0.18em] " +
+                (isActive ? "text-gold-soft" : "text-parchment")
+              }
+            >
+              {option.label}
+            </span>
             <span className="text-[11px] leading-snug text-parchment/55">
               {option.blurb}
             </span>

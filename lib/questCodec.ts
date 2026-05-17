@@ -67,24 +67,27 @@ export function decodeQuestBundle(encoded: string): QuestBundle | null {
 function isQuestOption(value: unknown): value is QuestOption {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  return typeof v.title === "string" && typeof v.activity === "string";
-}
-
-function isQuestBundle(value: unknown): value is QuestBundle {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
   const requiredStrings = [
-    "recipientName",
-    "senderName",
-    "message",
+    "title",
+    "activity",
     "dateTimeText",
     "reward",
-    "createdAt",
+    "message",
   ];
   for (const k of requiredStrings) {
     if (typeof v[k] !== "string") return false;
   }
   if (!isDifficulty(v.difficulty)) return false;
+  return true;
+}
+
+function isQuestBundle(value: unknown): value is QuestBundle {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  const requiredStrings = ["recipientName", "senderName", "createdAt"];
+  for (const k of requiredStrings) {
+    if (typeof v[k] !== "string") return false;
+  }
   if (!isTheme(v.theme)) return false;
   if (!Array.isArray(v.options) || v.options.length === 0) return false;
   if (!v.options.every(isQuestOption)) return false;

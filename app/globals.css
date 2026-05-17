@@ -74,12 +74,11 @@
 }
 
 body {
-  background: radial-gradient(
-      120% 80% at 50% 0%,
-      #2a1a0c 0%,
-      #1a1209 55%,
-      #0d0905 100%
-    );
+  /* Solid dark base. The actual backdrop (image or gradient) is
+     rendered by the `<PageBackground>` component mounted in the
+     root layout — that way React owns "is there a custom asset?"
+     and there's no chance of a CSS seam. */
+  background-color: #0d0905;
   color: rgb(var(--foreground));
   font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", sans-serif;

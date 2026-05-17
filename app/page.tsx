@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { QuestCard } from "@/components/quest/QuestCard";
 import { LandingHero } from "@/components/quest/LandingHero";
-import { makeDefaultQuestData } from "@/lib/questDefaults";
+import {
+  bundleToQuestData,
+  makeDefaultQuestBundle,
+} from "@/lib/questDefaults";
 
 export default function Home() {
-  // The sample card on the landing page is a static prop — using
-  // makeDefaultQuestData keeps the example in sync with the real default.
+  // The sample card on the landing page is a static projection of the
+  // default bundle's first option — keeps the example in sync with the
+  // real default users see when they hit /create.
+  const defaultBundle = makeDefaultQuestBundle();
   const sample = {
-    ...makeDefaultQuestData(),
+    ...bundleToQuestData(defaultBundle, 0),
+    recipientName: "Player Two",
     createdAt: "sample",
   };
 

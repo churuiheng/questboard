@@ -42,12 +42,12 @@ export async function generateMetadata({
   const recipient = bundle.recipientName.trim() || "you";
   const sender = bundle.senderName.trim() || "a friend";
   const difficultyLabel =
-    difficultyOptions.find((d) => d.value === bundle.difficulty)?.label ?? "";
+    difficultyOptions.find((d) => d.value === first.difficulty)?.label ?? "";
 
   const titleLine = `${first.title}${
     bundle.options.length > 1 ? ` (+ ${bundle.options.length - 1} more)` : ""
   }`;
-  const description = `${recipient}, ${sender} has summoned you to ${first.activity} — ${bundle.dateTimeText}. ${
+  const description = `${recipient}, ${sender} has summoned you to ${first.activity} — ${first.dateTimeText}. ${
     difficultyLabel ? `Difficulty: ${difficultyLabel}.` : ""
   }`.trim();
 

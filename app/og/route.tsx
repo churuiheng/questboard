@@ -110,8 +110,8 @@ function QuestPreview({ bundle }: { bundle: QuestBundle }) {
   const recipientText = safe(bundle.recipientName, "Brave soul");
   const senderText = safe(bundle.senderName, "A friend");
   const activityText = safe(first.activity, "A side quest");
-  const whenText = safe(bundle.dateTimeText, "Soon");
-  const rewardText = safe(bundle.reward, "Glory");
+  const whenText = safe(first.dateTimeText, "Soon");
+  const rewardText = safe(first.reward, "Glory");
 
   return (
     <div style={{ ...rootStyle, ...stackVertical }}>

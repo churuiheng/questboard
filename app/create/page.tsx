@@ -17,7 +17,7 @@ import {
   loadDraft,
   saveDraft,
 } from "@/lib/draft";
-import type { QuestBundle } from "@/types/quest";
+import type { QuestBundle, QuestData } from "@/types/quest";
 
 export default function CreatePage() {
   // First render is always the default bundle so server and client
@@ -175,16 +175,23 @@ export default function CreatePage() {
               </div>
             ) : null}
 
-            <div className="rounded-3xl bg-gradient-to-b from-parchment/[0.04] to-transparent p-4 sm:p-6">
-              <motion.div
-                key={pulseKey}
-                initial={{ scale: 0.985 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 220, damping: 20 }}
-              >
-                <QuestCard data={previewQuest} />
-              </motion.div>
-            </div>
+            {/* The preview uses `variant="scene"` so the sender sees the
+                same parchment card that opens for the recipient on the
+                /invite page. We add the same "message from a friend"
+                banner the overlay does (minus the accept/decline
+                buttons) so what they see is exactly what they ship. */}
+            <motion.div
+              key={pulseKey}
+              initial={{ scale: 0.985 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 220, damping: 20 }}
+            >
+              <QuestCard
+                data={previewQuest}
+                variant="scene"
+                footer={<MessageBanner quest={previewQuest} />}
+              />
+            </motion.div>
             <GenerateLinkPanel bundle={bundle} saveTick={saveTick} />
           </div>
         </motion.section>
@@ -202,5 +209,35 @@ export default function CreatePage() {
         See preview
       </a>
     </main>
+  );
+}
+
+/**
+ * The "A message from a friend" banner that appears under the stats grid
+ * inside the scene-variant card. The /invite overlay animates this in
+ * with a typewriter; in the /create preview we render it statically so
+ * the sender sees the final composition. Stays in sync with
+ * `QuestCardOverlay`'s message block — same wrapper styles, same
+ * placeholders, just no animation.
+ */
+function MessageBanner({ quest }: { quest: QuestData }) {
+  const filled = quest.message.trim().length > 0;
+  const senderLabel = quest.senderName.trim() || "a friend";
+  return (
+    <div className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink-soft">
+      <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
+        A message from {senderLabel}
+      </span>
+      <p
+        className={
+          "mt-1 block font-serif italic " +
+          (filled ? "text-ink-soft" : "text-ink/40")
+        }
+      >
+        {filled
+          ? quest.message
+          : "A note from you will appear here — keep it short and warm."}
+      </p>
+    </div>
   );
 }

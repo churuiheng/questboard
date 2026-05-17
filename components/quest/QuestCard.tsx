@@ -55,16 +55,22 @@ export function QuestCard({ data, variant = "preview", footer }: Props) {
 
             <Divider />
 
-            <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
               <Stat label="Activity" value={data.activity} placeholder="an activity" />
               <Stat label="When" value={data.dateTimeText} placeholder="when" />
               <Stat label="Reward" value={data.reward} placeholder="a reward" accent />
-              <Stat label="From" value={data.senderName} placeholder="a friend" />
             </dl>
 
-            <Divider />
-
-            <MessageLine value={data.message} />
+            {/* Message — only shown on the /create live preview. On the
+                /invite overlay (variant="scene") the typewriter banner
+                in QuestCardOverlay shows "A message from [sender]" with
+                the message text, so showing it here too would duplicate. */}
+            {variant === "preview" ? (
+              <>
+                <Divider />
+                <MessageLine value={data.message} />
+              </>
+            ) : null}
 
             {footer ? <div className="mt-5">{footer}</div> : null}
           </div>
@@ -140,13 +146,17 @@ function Stat({
 }) {
   const filled = value.trim().length > 0;
   return (
-    <div className="flex items-baseline gap-2">
-      <dt className="shrink-0 font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft">
+    // Vertical stack: label sits above the value so long values can wrap
+    // onto multiple lines instead of being truncated mid-word. `break-words`
+    // lets a single very long word (e.g. an unbroken URL or username) wrap
+    // gracefully rather than overflow its column.
+    <div className="flex min-w-0 flex-col gap-1">
+      <dt className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft">
         {label}
       </dt>
       <dd
         className={
-          "truncate font-medium " +
+          "break-words font-medium leading-snug " +
           (filled
             ? accent
               ? "text-ember-deep"
