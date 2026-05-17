@@ -13,8 +13,35 @@ export type QuestDifficulty = "cozy" | "normal" | "legendary" | "secret";
 export type QuestTheme = "tavern" | "forest" | "pixel";
 
 /**
+ * The note the recipient reads on a scroll. A tagged union so we can add
+ * more variations over time without reshaping QuestOption again:
+ *
+ *   - `text`     — the original short written note (typewriter-revealed
+ *                  on the invite page).
+ *   - `image`    — a picture note. Because the whole quest travels
+ *                  inside the share URL (no backend), the image is
+ *                  stored as a compressed data-URL — see
+ *                  `lib/imageNote.ts`. `caption` is optional flavor
+ *                  text shown beneath it ("" when none).
+ *   - `location` — a place note: `place` name + optional `address`.
+ *                  Rendered with an auto-built "Open in Maps" link
+ *                  (`lib/location.ts`). Pure text, tiny URL footprint.
+ *
+ * To add a variation later, add a member here and handle its `kind` in
+ * the codec guard (questCodec), the draft guard (draft.ts), the form
+ * editor (QuestForm NoteEditor), and the three render sites (QuestCard,
+ * create-page MessageBanner, QuestCardOverlay).
+ */
+export type QuestNote =
+  | { kind: "text"; text: string }
+  | { kind: "image"; image: string; caption: string }
+  | { kind: "location"; place: string; address: string };
+
+export type QuestNoteKind = QuestNote["kind"];
+
+/**
  * Per-option fields. Each scroll on the board is one of these.
- * Every option carries its own title, activity, when, reward, message,
+ * Every option carries its own title, activity, when, reward, note,
  * and difficulty.
  */
 export type QuestOption = {
@@ -22,7 +49,7 @@ export type QuestOption = {
   activity: string;
   dateTimeText: string;
   reward: string;
-  message: string;
+  note: QuestNote;
   difficulty: QuestDifficulty;
 };
 
@@ -48,7 +75,7 @@ export type QuestData = {
   dateTimeText: string;
   reward: string;
   difficulty: QuestDifficulty;
-  message: string;
+  note: QuestNote;
   theme: QuestTheme;
   createdAt: string;
 };

@@ -1,9 +1,11 @@
 "use client";
 
+import { useId, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type {
   QuestBundle,
   QuestDifficulty,
+  QuestNote,
   QuestOption,
 } from "@/types/quest";
 import {
@@ -15,6 +17,11 @@ import {
   messageTemplates,
   rewardPresets,
 } from "@/lib/questDefaults";
+import {
+  describeImageNoteError,
+  fileToImageNoteDataUrl,
+  isImageNoteError,
+} from "@/lib/imageNote";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/Field";
 import { CalendarDropdown } from "@/components/quest/CalendarDropdown";
 
@@ -232,34 +239,12 @@ export function QuestForm({ value, onChange }: Props) {
                   </InputWithAction>
                 </Field>
 
-                {/* MESSAGE — textarea + randomize square */}
-                <Field label="Message">
-                  <InputWithAction align="start">
-                    <div className="relative w-full">
-                      <TextArea
-                        value={option.message}
-                        maxLength={fieldLimits.message}
-                        placeholder="Write a short note for the recipient…"
-                        onChange={(e) =>
-                          patchOption(index, { message: e.target.value })
-                        }
-                      />
-                      <CharCounter
-                        current={option.message.length}
-                        max={fieldLimits.message}
-                      />
-                    </div>
-                    <RandomizeButton
-                      label="Randomize the message"
-                      onClick={() => {
-                        const next = pickRandomString(
-                          messageTemplates.map((t) => t.text),
-                          option.message,
-                        );
-                        patchOption(index, { message: next });
-                      }}
-                    />
-                  </InputWithAction>
+                {/* NOTE — text or image variant */}
+                <Field label="Note">
+                  <NoteEditor
+                    note={option.note}
+                    onChange={(note) => patchOption(index, { note })}
+                  />
                 </Field>
               </motion.div>
             ))}
@@ -322,6 +307,261 @@ function pickRandomString(presets: string[], current: string): string {
   if (presets.length <= 1) return presets[0];
   const others = presets.filter((p) => p !== current);
   return others[Math.floor(Math.random() * others.length)];
+}
+
+/* ------------------------------------------------------------ note editor */
+
+/**
+ * Editor for one option's note. Variants behind a segmented toggle:
+ *
+ *   - Text     — the original textarea + randomize button.
+ *   - Image    — a file picker that compresses the chosen image to a
+ *                data-URL (lib/imageNote.ts) so it fits in the share
+ *                URL, plus an optional caption.
+ *   - Location — place name + optional address; a Maps link is built
+ *                at render time (lib/location.ts).
+ *
+ * Toggling between variants doesn't discard the others' content — each
+ * side being left is stashed in a ref so flipping back restores it.
+ */
+function NoteEditor({
+  note,
+  onChange,
+}: {
+  note: QuestNote;
+  onChange: (next: QuestNote) => void;
+}) {
+  const inputId = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Last-seen value for each variant the user isn't currently editing,
+  // so a toggle round-trip is lossless. Seeded from the initial note.
+  const stash = useRef({
+    text: note.kind === "text" ? note.text : "",
+    image: note.kind === "image" ? note.image : "",
+    caption: note.kind === "image" ? note.caption : "",
+    place: note.kind === "location" ? note.place : "",
+    address: note.kind === "location" ? note.address : "",
+  });
+
+  function stashCurrent() {
+    if (note.kind === "text") stash.current.text = note.text;
+    else if (note.kind === "image") {
+      stash.current.image = note.image;
+      stash.current.caption = note.caption;
+    } else {
+      stash.current.place = note.place;
+      stash.current.address = note.address;
+    }
+  }
+
+  function selectKind(kind: QuestNote["kind"]) {
+    if (kind === note.kind) return;
+    setError(null);
+    stashCurrent(); // preserve whatever we're leaving before swapping
+    if (kind === "image") {
+      onChange({
+        kind: "image",
+        image: stash.current.image,
+        caption: stash.current.caption,
+      });
+    } else if (kind === "location") {
+      onChange({
+        kind: "location",
+        place: stash.current.place,
+        address: stash.current.address,
+      });
+    } else {
+      onChange({ kind: "text", text: stash.current.text });
+    }
+  }
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const dataUrl = await fileToImageNoteDataUrl(file);
+      onChange({
+        kind: "image",
+        image: dataUrl,
+        caption: note.kind === "image" ? note.caption : stash.current.caption,
+      });
+    } catch (err) {
+      setError(
+        isImageNoteError(err)
+          ? describeImageNoteError(err)
+          : "Couldn't process that image.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <NoteKindToggle active={note.kind} onSelect={selectKind} />
+
+      {note.kind === "text" ? (
+        <InputWithAction align="start">
+          <div className="relative w-full">
+            <TextArea
+              value={note.text}
+              maxLength={fieldLimits.message}
+              placeholder="Write a short note for the recipient…"
+              onChange={(e) => onChange({ kind: "text", text: e.target.value })}
+            />
+            <CharCounter current={note.text.length} max={fieldLimits.message} />
+          </div>
+          <RandomizeButton
+            label="Randomize the message"
+            onClick={() => {
+              const next = pickRandomString(
+                messageTemplates.map((t) => t.text),
+                note.text,
+              );
+              onChange({ kind: "text", text: next });
+            }}
+          />
+        </InputWithAction>
+      ) : note.kind === "image" ? (
+        <div className="flex flex-col gap-3">
+          {note.image ? (
+            <div className="relative overflow-hidden rounded-lg border border-parchment/15 bg-ink/40">
+              {/* Data-URL preview; not a remote asset, so next/image
+                  buys nothing here. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={note.image}
+                alt="Your image note preview"
+                className="max-h-56 w-full object-contain"
+              />
+              <label
+                htmlFor={inputId}
+                className="absolute right-2 top-2 cursor-pointer rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
+              >
+                {busy ? "Shrinking…" : "Replace"}
+              </label>
+            </div>
+          ) : (
+            <label
+              htmlFor={inputId}
+              className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-parchment/25 bg-ink/30 px-4 py-7 text-center transition hover:border-gold/50"
+            >
+              <span className="font-display text-xs uppercase tracking-[0.22em] text-gold/80">
+                {busy ? "Shrinking…" : "Choose an image"}
+              </span>
+              <span className="text-[11px] text-parchment/45">
+                It rides inside the link, so it gets auto-shrunk small.
+              </span>
+            </label>
+          )}
+
+          <input
+            id={inputId}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              // Reset so picking the same file again still fires change.
+              e.currentTarget.value = "";
+              handleFile(f);
+            }}
+          />
+
+          {error ? (
+            <p className="text-[11px] text-ember" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <TextInput
+            value={note.caption}
+            maxLength={fieldLimits.caption}
+            placeholder="Caption (optional)"
+            onChange={(e) =>
+              onChange({
+                kind: "image",
+                image: note.image,
+                caption: e.target.value,
+              })
+            }
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <TextInput
+            value={note.place}
+            maxLength={fieldLimits.place}
+            placeholder="Place name — e.g. The Cozy Ramen Spot"
+            aria-label="Place name"
+            onChange={(e) =>
+              onChange({
+                kind: "location",
+                place: e.target.value,
+                address: note.address,
+              })
+            }
+          />
+          <TextInput
+            value={note.address}
+            maxLength={fieldLimits.address}
+            placeholder="Address or area (optional)"
+            aria-label="Address"
+            onChange={(e) =>
+              onChange({
+                kind: "location",
+                place: note.place,
+                address: e.target.value,
+              })
+            }
+          />
+          <p className="text-[11px] text-parchment/45">
+            We&apos;ll add an &ldquo;Open in Maps&rdquo; link from whatever
+            you type — no map is stored, so it stays a tiny link.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoteKindToggle({
+  active,
+  onSelect,
+}: {
+  active: QuestNote["kind"];
+  onSelect: (kind: QuestNote["kind"]) => void;
+}) {
+  const kinds: { value: QuestNote["kind"]; label: string }[] = [
+    { value: "text", label: "Text" },
+    { value: "image", label: "Image" },
+    { value: "location", label: "Location" },
+  ];
+  return (
+    <div className="inline-flex self-start rounded-full border border-parchment/15 bg-ink/40 p-0.5">
+      {kinds.map((k) => {
+        const on = k.value === active;
+        return (
+          <button
+            key={k.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onSelect(k.value)}
+            className={
+              "rounded-full px-3.5 py-1.5 font-display text-[10px] uppercase tracking-[0.2em] transition " +
+              (on ? "bg-gold text-ink" : "text-parchment/60 hover:text-parchment")
+            }
+          >
+            {k.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------ atoms */

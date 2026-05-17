@@ -1,4 +1,4 @@
-import type { QuestBundle, QuestOption } from "@/types/quest";
+import type { QuestBundle, QuestNote, QuestOption } from "@/types/quest";
 
 // Base64url is base64 with URL-safe characters and no padding.
 // We use it so the entire quest payload fits inline in `?q=`.
@@ -64,19 +64,29 @@ export function decodeQuestBundle(encoded: string): QuestBundle | null {
 
 /* ----------------- Runtime validation ----------------- */
 
+function isQuestNote(value: unknown): value is QuestNote {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (v.kind === "text") {
+    return typeof v.text === "string";
+  }
+  if (v.kind === "image") {
+    return typeof v.image === "string" && typeof v.caption === "string";
+  }
+  if (v.kind === "location") {
+    return typeof v.place === "string" && typeof v.address === "string";
+  }
+  return false;
+}
+
 function isQuestOption(value: unknown): value is QuestOption {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  const requiredStrings = [
-    "title",
-    "activity",
-    "dateTimeText",
-    "reward",
-    "message",
-  ];
+  const requiredStrings = ["title", "activity", "dateTimeText", "reward"];
   for (const k of requiredStrings) {
     if (typeof v[k] !== "string") return false;
   }
+  if (!isQuestNote(v.note)) return false;
   if (!isDifficulty(v.difficulty)) return false;
   return true;
 }

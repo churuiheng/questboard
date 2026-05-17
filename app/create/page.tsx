@@ -17,6 +17,7 @@ import {
   loadDraft,
   saveDraft,
 } from "@/lib/draft";
+import { buildMapsUrl } from "@/lib/location";
 import type { QuestBundle, QuestData } from "@/types/quest";
 
 export default function CreatePage() {
@@ -221,23 +222,66 @@ export default function CreatePage() {
  * placeholders, just no animation.
  */
 function MessageBanner({ quest }: { quest: QuestData }) {
-  const filled = quest.message.trim().length > 0;
   const senderLabel = quest.senderName.trim() || "a friend";
+  const { note } = quest;
   return (
     <div className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink-soft">
       <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
         A message from {senderLabel}
       </span>
-      <p
-        className={
-          "mt-1 block font-serif italic " +
-          (filled ? "text-ink-soft" : "text-ink/40")
-        }
-      >
-        {filled
-          ? quest.message
-          : "A note from you will appear here — keep it short and warm."}
-      </p>
+      {note.kind === "image" ? (
+        note.image ? (
+          <figure className="m-0 mt-2">
+            {/* Data-URL preview baked into the quest. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={note.image}
+              alt={note.caption.trim() || "A picture from the sender"}
+              className="max-h-56 w-full rounded-md object-contain ring-1 ring-ink/15"
+            />
+            {note.caption.trim().length > 0 ? (
+              <figcaption className="mt-1 block font-serif italic text-ink-soft">
+                {note.caption}
+              </figcaption>
+            ) : null}
+          </figure>
+        ) : (
+          <p className="mt-1 block font-serif italic text-ink/40">
+            Pick an image and it&apos;ll appear here for the recipient.
+          </p>
+        )
+      ) : note.kind === "location" ? (
+        note.place.trim().length > 0 ? (
+          <div className="mt-1 text-ink-soft">
+            <p className="font-display text-sm font-semibold text-ink">
+              📍 {note.place}
+            </p>
+            {note.address.trim().length > 0 ? (
+              <p className="font-serif italic leading-snug">{note.address}</p>
+            ) : null}
+            {buildMapsUrl(note.place, note.address) ? (
+              <span className="mt-0.5 inline-block font-display text-[10px] uppercase tracking-[0.2em] text-ember-deep">
+                Open in Maps ↗
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-1 block font-serif italic text-ink/40">
+            Add a place and it&apos;ll show here with a Maps link.
+          </p>
+        )
+      ) : (
+        <p
+          className={
+            "mt-1 block font-serif italic " +
+            (note.text.trim().length > 0 ? "text-ink-soft" : "text-ink/40")
+          }
+        >
+          {note.text.trim().length > 0
+            ? note.text
+            : "A note from you will appear here — keep it short and warm."}
+        </p>
+      )}
     </div>
   );
 }

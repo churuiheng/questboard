@@ -7,6 +7,7 @@ import { Typewriter } from "./Typewriter";
 import { SparkleBurst } from "./SparkleBurst";
 import { ShareReplyButton } from "./ShareReplyButton";
 import { Button } from "@/components/ui/Button";
+import { buildMapsUrl } from "@/lib/location";
 import type { BundleResponse, QuestData } from "@/types/quest";
 
 type Props = {
@@ -76,6 +77,11 @@ export function QuestCardOverlay({
   else if (response.optionIndex === index) footerState = "thisAccepted";
   else footerState = "otherAccepted";
 
+  const mapsUrl =
+    quest.note.kind === "location"
+      ? buildMapsUrl(quest.note.place, quest.note.address)
+      : null;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -118,10 +124,63 @@ export function QuestCardOverlay({
                     <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
                       A message from {quest.senderName.trim() || "the sender"}
                     </span>
-                    <Typewriter
-                      text={quest.message.trim() || "Your presence is requested."}
-                      className="mt-1 block font-serif italic"
-                    />
+                    {quest.note.kind === "image" && quest.note.image ? (
+                      <figure className="m-0 mt-1.5">
+                        {/* Data-URL image carried inside the quest. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={quest.note.image}
+                          alt={
+                            quest.note.caption.trim() ||
+                            "A picture from the sender"
+                          }
+                          className="max-h-72 w-full rounded-md object-contain ring-1 ring-ink/15"
+                        />
+                        {quest.note.caption.trim().length > 0 ? (
+                          <Typewriter
+                            text={quest.note.caption}
+                            className="mt-1.5 block font-serif italic"
+                          />
+                        ) : null}
+                      </figure>
+                    ) : quest.note.kind === "location" &&
+                      quest.note.place.trim().length > 0 ? (
+                      <div className="mt-1.5 flex items-start gap-2">
+                        <span aria-hidden className="mt-0.5 text-ember-deep">
+                          📍
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-display text-sm font-semibold text-ink">
+                            {quest.note.place}
+                          </p>
+                          {quest.note.address.trim().length > 0 ? (
+                            <p className="font-serif italic leading-snug text-ink-soft">
+                              {quest.note.address}
+                            </p>
+                          ) : null}
+                          {mapsUrl ? (
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-block font-display text-[10px] uppercase tracking-[0.2em] text-ember-deep underline-offset-2 hover:underline"
+                            >
+                              Open in Maps ↗
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <Typewriter
+                        text={
+                          quest.note.kind === "text" &&
+                          quest.note.text.trim().length > 0
+                            ? quest.note.text
+                            : "Your presence is requested."
+                        }
+                        className="mt-1 block font-serif italic"
+                      />
+                    )}
                   </motion.div>
                 ) : null}
               </AnimatePresence>

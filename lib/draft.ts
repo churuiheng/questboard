@@ -18,7 +18,10 @@ import type { QuestBundle, QuestOption } from "@/types/quest";
  * become unreadable rather than crashing the form with missing fields.
  */
 
-const STORAGE_KEY = "questboard:draft:v2";
+// v3: `message: string` became `note: QuestNote` (text | image). Old v2
+// drafts have no `note`, so `isValidOptionShape` would reject them
+// anyway — the version bump just skips the doomed parse entirely.
+const STORAGE_KEY = "questboard:draft:v3";
 
 export type DraftEnvelope = {
   bundle: QuestBundle;
@@ -130,7 +133,20 @@ function isValidOptionShape(option: unknown): option is QuestOption {
     typeof o.activity === "string" &&
     typeof o.dateTimeText === "string" &&
     typeof o.reward === "string" &&
-    typeof o.message === "string" &&
+    isValidNoteShape(o.note) &&
     typeof o.difficulty === "string"
   );
+}
+
+function isValidNoteShape(note: unknown): boolean {
+  if (!note || typeof note !== "object") return false;
+  const n = note as Record<string, unknown>;
+  if (n.kind === "text") return typeof n.text === "string";
+  if (n.kind === "image") {
+    return typeof n.image === "string" && typeof n.caption === "string";
+  }
+  if (n.kind === "location") {
+    return typeof n.place === "string" && typeof n.address === "string";
+  }
+  return false;
 }

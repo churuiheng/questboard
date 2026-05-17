@@ -1,4 +1,5 @@
-import type { QuestData } from "@/types/quest";
+import type { QuestData, QuestNote } from "@/types/quest";
+import { buildMapsUrl } from "@/lib/location";
 import { DifficultyBadge } from "./DifficultyBadge";
 
 type Props = {
@@ -68,7 +69,7 @@ export function QuestCard({ data, variant = "preview", footer }: Props) {
             {variant === "preview" ? (
               <>
                 <Divider />
-                <MessageLine value={data.message} />
+                <NoteLine note={data.note} />
               </>
             ) : null}
 
@@ -119,8 +120,76 @@ function RecipientLine({ value }: { value: string }) {
   );
 }
 
-function MessageLine({ value }: { value: string }) {
-  const filled = value.trim().length > 0;
+/**
+ * Renders whichever note variant the option carries. Text mirrors the
+ * old quoted-italic look; image shows the picture with an optional
+ * caption. Empty states keep the same low-opacity placeholder nudge so
+ * the card never reads as "done" before the sender fills it in.
+ */
+function NoteLine({ note }: { note: QuestNote }) {
+  if (note.kind === "image") {
+    if (!note.image) {
+      return (
+        <p className="font-serif italic leading-relaxed text-ink/35">
+          Add an image the recipient will see…
+        </p>
+      );
+    }
+    return (
+      <figure className="m-0">
+        {/* Data-URL image baked into the quest; next/image adds nothing. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={note.image}
+          alt={note.caption.trim() || "A picture from the sender"}
+          className="max-h-72 w-full rounded-lg object-contain ring-1 ring-ink/15"
+        />
+        {note.caption.trim().length > 0 ? (
+          <figcaption className="mt-1.5 font-serif italic leading-relaxed text-ink-soft">
+            {note.caption}
+          </figcaption>
+        ) : null}
+      </figure>
+    );
+  }
+
+  if (note.kind === "location") {
+    if (note.place.trim().length === 0) {
+      return (
+        <p className="font-serif italic leading-relaxed text-ink/35">
+          Add a place the recipient should meet you at…
+        </p>
+      );
+    }
+    const mapsUrl = buildMapsUrl(note.place, note.address);
+    return (
+      <div className="flex items-start gap-2 text-ink-soft">
+        <PinGlyph />
+        <div className="min-w-0">
+          <p className="font-display text-sm font-semibold text-ink">
+            {note.place}
+          </p>
+          {note.address.trim().length > 0 ? (
+            <p className="font-serif italic leading-snug text-ink-soft">
+              {note.address}
+            </p>
+          ) : null}
+          {mapsUrl ? (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-block font-display text-[10px] uppercase tracking-[0.2em] text-ember-deep underline-offset-2 hover:underline"
+            >
+              Open in Maps ↗
+            </a>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const filled = note.text.trim().length > 0;
   return (
     <p
       className={
@@ -128,8 +197,29 @@ function MessageLine({ value }: { value: string }) {
         (filled ? "text-ink-soft" : "text-ink/35")
       }
     >
-      {filled ? `“${value}”` : "Add a note that the recipient will read…"}
+      {filled ? `“${note.text}”` : "Add a note that the recipient will read…"}
     </p>
+  );
+}
+
+/** Map-pin glyph in SVG so it inherits the parchment ink color. */
+function PinGlyph() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      className="mt-0.5 shrink-0 text-ember-deep"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 21s-6.5-5.4-6.5-10A6.5 6.5 0 0 1 18.5 11c0 4.6-6.5 10-6.5 10Z" />
+      <circle cx="12" cy="11" r="2.4" />
+    </svg>
   );
 }
 

@@ -85,8 +85,16 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   }
 
   // Warn (but don't block) if the encoded data is uncomfortably long for
-  // some messaging apps that truncate URLs.
-  const tooLong = encoded.length > 1600;
+  // some messaging apps that truncate URLs. An image note is inherently
+  // heavy (the picture rides inside the link as a data-URL), so we use a
+  // looser threshold and different copy for that case — a 1600-char
+  // warning on every image link would just be noise.
+  const hasImageNote = bundle.options.some(
+    (o) => o.note.kind === "image" && o.note.image.length > 0,
+  );
+  const tooLong = hasImageNote
+    ? encoded.length > 22_000
+    : encoded.length > 1600;
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-parchment/10 bg-ink/30 p-4 backdrop-blur">
@@ -171,8 +179,14 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
             </Button>
             {tooLong ? (
               <span className="text-[11px] text-ember">
-                This one&apos;s a long link — some apps may shorten it.
-                Try trimming the message or activity if it gets cut off.
+                {hasImageNote
+                  ? "This link is long because the image travels inside it — it works on the web, but some chat apps may cut it off. A smaller/simpler image, or a text note, keeps it shorter."
+                  : "This one's a long link — some apps may shorten it. Try trimming the message or activity if it gets cut off."}
+              </span>
+            ) : hasImageNote ? (
+              <span className="text-[11px] text-parchment/45">
+                Heads up: an image note makes the link much longer than a
+                text one — fine for most apps, but worth a test send.
               </span>
             ) : null}
           </div>

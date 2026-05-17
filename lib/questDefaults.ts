@@ -2,6 +2,7 @@ import type {
   DifficultyOption,
   QuestBundle,
   QuestData,
+  QuestNote,
   QuestOption,
   ThemeOption,
 } from "@/types/quest";
@@ -115,13 +116,35 @@ export const themeOptions: ThemeOption[] = [
  * A single QuestOption preset matching the canonical "Great Ramen
  * Expedition" example. Used as the starter option on /create.
  */
+/** A fresh text note seeded with the first template. */
+export function makeDefaultNote(): QuestNote {
+  return { kind: "text", text: messageTemplates[0].text };
+}
+
+/**
+ * Switching note type in the form shouldn't lose what the user already
+ * had, but the two variants share no fields, so we just hand back a
+ * clean note of the requested kind. The form keeps the previous note in
+ * its own state if it wants to restore on toggle-back.
+ */
+export function makeEmptyNote(kind: QuestNote["kind"]): QuestNote {
+  switch (kind) {
+    case "image":
+      return { kind: "image", image: "", caption: "" };
+    case "location":
+      return { kind: "location", place: "", address: "" };
+    default:
+      return { kind: "text", text: "" };
+  }
+}
+
 export function makeDefaultQuestOption(): QuestOption {
   return {
     title: activityPresets[0].title,
     activity: activityPresets[0].activity,
     dateTimeText: datePresets[2],
     reward: activityPresets[0].reward,
-    message: messageTemplates[0].text,
+    note: makeDefaultNote(),
     difficulty: "cozy",
   };
 }
@@ -148,7 +171,7 @@ export function bundleToQuestData(
     activity: option.activity,
     dateTimeText: option.dateTimeText,
     reward: option.reward,
-    message: option.message,
+    note: option.note,
     difficulty: option.difficulty,
     recipientName: bundle.recipientName,
     senderName: bundle.senderName,
@@ -170,5 +193,11 @@ export const fieldLimits = {
   activity: 80,
   dateTimeText: 60,
   reward: 60,
+  // `message` caps the text-note variant. `caption` caps the optional
+  // line under an image note. `place`/`address` cap the location note.
+  // All ride in the URL, so all stay short.
   message: 240,
+  caption: 120,
+  place: 60,
+  address: 120,
 } as const;
