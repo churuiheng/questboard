@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------
+   Custom-font slots.
+
+   Drop a file at one of these paths and that font becomes the primary
+   choice for its role — the rest of the stack only kicks in when the
+   file is absent (and the browser silently skips failed @font-face URLs).
+
+     public/fonts/display.{woff2,ttf,otf,woff}   →  font-display utility
+     public/fonts/body.{woff2,ttf,otf,woff}      →  font-sans utility (body)
+     public/fonts/mono.{woff2,ttf,otf,woff}      →  font-mono utility
+
+   The format() hints let the browser pick the lightest available format.
+   --------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "QB Display";
+  src: url("/fonts/display.woff2") format("woff2"),
+       url("/fonts/display.ttf") format("truetype"),
+       url("/fonts/display.otf") format("opentype"),
+       url("/fonts/display.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "QB Body";
+  src: url("/fonts/body.woff2") format("woff2"),
+       url("/fonts/body.ttf") format("truetype"),
+       url("/fonts/body.otf") format("opentype"),
+       url("/fonts/body.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "QB Mono";
+  src: url("/fonts/mono.woff2") format("woff2"),
+       url("/fonts/mono.ttf") format("truetype"),
+       url("/fonts/mono.otf") format("opentype"),
+       url("/fonts/mono.woff") format("woff");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------
+   Tavern theme tokens. Consumed by tailwind.config.ts so utilities
+   like `bg-parchment`, `text-ink`, `text-ember-deep` work everywhere.
+   --------------------------------------------------------------------- */
+
+:root {
+  /* Stored as space-separated R G B triplets so Tailwind 3's
+     `rgb(var(--x) / <alpha-value>)` pattern can apply opacity
+     modifiers like `bg-parchment/85` without losing the channels. */
+  --background: 26 18 9;          /* deep tavern night */
+  --foreground: 245 233 207;      /* warm parchment text */
+
+  --parchment: 244 228 191;
+  --parchment-deep: 230 207 149;
+  --ink: 42 26 12;
+  --ink-soft: 74 47 23;
+  --ember: 217 107 52;
+  --ember-deep: 168 67 26;
+  --gold: 230 179 82;
+  --gold-soft: 240 210 138;
+  --moss: 111 140 74;
+  --rune: 110 74 134;
+}
+
+body {
+  background: radial-gradient(
+      120% 80% at 50% 0%,
+      #2a1a0c 0%,
+      #1a1209 55%,
+      #0d0905 100%
+    );
+  color: rgb(var(--foreground));
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", sans-serif;
+  min-height: 100vh;
+}
+
+/* Subtle paper-grain noise overlay you can drop onto any container.
+   Uses a ::before pseudo-element so it composites OVER any background
+   color/gradient set by Tailwind classes (e.g. `bg-gradient-to-b
+   from-parchment to-parchment-deep`) instead of replacing them. */
+.paper-noise {
+  position: relative;
+  isolation: isolate;
+}
+.paper-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(rgba(74, 47, 23, 0.08) 1px, transparent 1px),
+    radial-gradient(rgba(74, 47, 23, 0.05) 1px, transparent 1px);
+  background-size: 6px 6px, 11px 11px;
+  background-position: 0 0, 3px 3px;
+  z-index: 0;
+}
+.paper-noise > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Tailwind 3 already exposes `animate-ember-pulse` and `animate-flicker`
+   via the config above. The classes below are aliases kept for backwards
+   compatibility with existing markup. */
+.ember-pulse {
+  animation: ember-pulse 2.4s ease-out infinite;
+}
+.flicker {
+  animation: flicker 3.6s ease-in-out infinite;
+}
+
+@keyframes ember-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(217, 107, 52, 0.55); }
+  50%      { box-shadow: 0 0 0 12px rgba(217, 107, 52, 0); }
+}
+@keyframes flicker {
+  0%, 100% { opacity: 0.85; transform: translateY(0); }
+  50%      { opacity: 1;    transform: translateY(-1px); }
+}
