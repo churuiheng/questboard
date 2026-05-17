@@ -259,7 +259,7 @@ function MessageBanner({ quest }: { quest: QuestData }) {
             {note.address.trim().length > 0 ? (
               <p className="font-serif italic leading-snug">{note.address}</p>
             ) : null}
-            {buildMapsUrl(note.place, note.address) ? (
+            {buildMapsUrl(note.place, note.address, note.lat, note.lng) ? (
               <span className="mt-0.5 inline-block font-display text-[10px] uppercase tracking-[0.2em] text-ember-deep">
                 Open in Maps ↗
               </span>

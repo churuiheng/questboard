@@ -12,8 +12,8 @@ export type ShareResult = "shared" | "copied" | "failed" | "cancelled";
  * show a confirmation toast.
  *
  * Example output:
- *   "Hey Tomás — just accepted ⚔ The Great Ramen Expedition!
- *    See you Friday night."
+ *   "Hey Tomás — quest accepted: ⚔ The Great Ramen Expedition! I'm in.
+ *    See you Friday night — don't be late, hero. 🤍"
  */
 export async function shareAcceptance({
   quest,
@@ -68,8 +68,10 @@ export function buildAcceptanceText(quest: QuestData): string {
   const when = quest.dateTimeText.trim();
 
   const opener = sender ? `Hey ${sender} —` : "Hey —";
-  const middle = `just accepted ⚔ ${title}!`;
-  const closer = when ? `See you ${when}.` : "";
+  const middle = `quest accepted: ⚔ ${title}! I'm in.`;
+  const closer = when
+    ? `See you ${when} — don't be late, hero. 🤍`
+    : "Adventure awaits. 🤍";
 
   return [opener, middle, closer].filter(Boolean).join(" ");
 }

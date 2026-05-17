@@ -122,7 +122,21 @@ function isValidBundleShape(bundle: unknown): bundle is QuestBundle {
   if (typeof b.senderName !== "string") return false;
   if (typeof b.createdAt !== "string") return false;
   if (!Array.isArray(b.options) || b.options.length === 0) return false;
-  return b.options.every(isValidOptionShape);
+  if (!b.options.every(isValidOptionShape)) return false;
+  // `ending` is optional; only reject a present-but-malformed one so
+  // older v3 drafts (no ending) still restore.
+  if (b.ending !== undefined) {
+    const e = b.ending as Record<string, unknown>;
+    if (
+      !e ||
+      typeof e !== "object" ||
+      typeof e.message !== "string" ||
+      typeof e.image !== "string"
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isValidOptionShape(option: unknown): option is QuestOption {
@@ -146,7 +160,12 @@ function isValidNoteShape(note: unknown): boolean {
     return typeof n.image === "string" && typeof n.caption === "string";
   }
   if (n.kind === "location") {
-    return typeof n.place === "string" && typeof n.address === "string";
+    if (typeof n.place !== "string" || typeof n.address !== "string") {
+      return false;
+    }
+    if (n.lat !== undefined && typeof n.lat !== "number") return false;
+    if (n.lng !== undefined && typeof n.lng !== "number") return false;
+    return true;
   }
   return false;
 }

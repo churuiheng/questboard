@@ -161,7 +161,7 @@ function NoteLine({ note }: { note: QuestNote }) {
         </p>
       );
     }
-    const mapsUrl = buildMapsUrl(note.place, note.address);
+    const mapsUrl = buildMapsUrl(note.place, note.address, note.lat, note.lng);
     return (
       <div className="flex items-start gap-2 text-ink-soft">
         <PinGlyph />

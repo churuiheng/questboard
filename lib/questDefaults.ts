@@ -2,6 +2,7 @@ import type {
   DifficultyOption,
   QuestBundle,
   QuestData,
+  QuestEnding,
   QuestNote,
   QuestOption,
   ThemeOption,
@@ -104,6 +105,35 @@ export const messageTemplates: { label: string; text: string }[] = [
   },
 ];
 
+/**
+ * Light-hearted one-liners shown on the wax seal the moment the
+ * recipient accepts. There's no backend to notify the sender, so the
+ * payoff is the fun of the moment itself — keep these grin-worthy.
+ */
+export const acceptanceCheers: string[] = [
+  "The party grows stronger. ⚔️",
+  "A new legend begins. 🗺️",
+  "Snacks have been morally secured. 🥟",
+  "Destiny: successfully rescheduled to be awesome.",
+  "+1 to the friendship stat. 🤍",
+  "The tavern erupts in distant cheering.",
+  "Quest log updated. Don't be late, hero.",
+  "Critical hit on a good time. 🎲",
+];
+
+/**
+ * Pick a cheer deterministically from a seed (quest title + option
+ * index) so it stays stable across re-renders — no flicker, but still
+ * varies between quests.
+ */
+export function pickAcceptanceCheer(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return acceptanceCheers[h % acceptanceCheers.length];
+}
+
 export const themeOptions: ThemeOption[] = [
   {
     value: "tavern",
@@ -149,6 +179,11 @@ export function makeDefaultQuestOption(): QuestOption {
   };
 }
 
+/** A blank custom ending (falls back to a random cheer at render time). */
+export function makeDefaultEnding(): QuestEnding {
+  return { message: "", image: "" };
+}
+
 export function makeDefaultQuestBundle(): QuestBundle {
   return {
     recipientName: "",
@@ -156,6 +191,7 @@ export function makeDefaultQuestBundle(): QuestBundle {
     theme: "tavern",
     createdAt: new Date().toISOString(),
     options: [makeDefaultQuestOption()],
+    ending: makeDefaultEnding(),
   };
 }
 
@@ -173,6 +209,9 @@ export function bundleToQuestData(
     reward: option.reward,
     note: option.note,
     difficulty: option.difficulty,
+    // Bundle-level, so every projected option carries the same ending.
+    // Legacy bundles have none — hand back a blank one.
+    ending: bundle.ending ?? makeDefaultEnding(),
     recipientName: bundle.recipientName,
     senderName: bundle.senderName,
     theme: bundle.theme,
@@ -198,6 +237,8 @@ export const fieldLimits = {
   // All ride in the URL, so all stay short.
   message: 240,
   caption: 120,
+  // `endingMessage` caps the sender's custom accept-celebration line.
+  endingMessage: 160,
   place: 60,
   address: 120,
 } as const;

@@ -8,6 +8,7 @@ import { SparkleBurst } from "./SparkleBurst";
 import { ShareReplyButton } from "./ShareReplyButton";
 import { Button } from "@/components/ui/Button";
 import { buildMapsUrl } from "@/lib/location";
+import { pickAcceptanceCheer } from "@/lib/questDefaults";
 import type { BundleResponse, QuestData } from "@/types/quest";
 
 type Props = {
@@ -79,8 +80,17 @@ export function QuestCardOverlay({
 
   const mapsUrl =
     quest.note.kind === "location"
-      ? buildMapsUrl(quest.note.place, quest.note.address)
+      ? buildMapsUrl(
+          quest.note.place,
+          quest.note.address,
+          quest.note.lat,
+          quest.note.lng,
+        )
       : null;
+
+  // Deterministic so it doesn't reshuffle on every re-render, but still
+  // varies per quest.
+  const cheer = pickAcceptanceCheer(`${quest.title}:${index}`);
 
   return (
     <motion.div
@@ -219,13 +229,13 @@ export function QuestCardOverlay({
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4 }}
-                    className="flex flex-col items-end gap-2"
+                    className="flex flex-col items-center gap-3"
                   >
-                    <AcceptedBanner />
+                    <AcceptedBanner ending={quest.ending} cheer={cheer} />
                     <ShareReplyButton quest={quest} />
                     <button
                       onClick={onResetResponse}
-                      className="self-end font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft/60 underline-offset-2 hover:text-ink-soft hover:underline"
+                      className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft/60 underline-offset-2 hover:text-ink-soft hover:underline"
                     >
                       Change my mind
                     </button>
@@ -343,16 +353,63 @@ export function QuestCardOverlay({
 
 /* ----------------- Banners ----------------- */
 
-function AcceptedBanner() {
+/**
+ * The payoff. Since nothing is sent to a server, the reward for
+ * accepting is the moment itself: a wax seal "stamps" down onto the
+ * parchment with a spring overshoot. The sender can customize it — a
+ * written line (falls back to a randomized cheer) and an optional
+ * celebratory image, both carried in the bundle's `ending`.
+ * (SparkleBurst fires alongside this from the parent.)
+ */
+function AcceptedBanner({
+  ending,
+  cheer,
+}: {
+  ending: QuestData["ending"];
+  cheer: string;
+}) {
+  const line = ending.message.trim() || cheer;
   return (
-    <div className="flex items-center gap-3 rounded-full bg-ember/15 px-4 py-2 ring-1 ring-ember/40">
-      <span aria-hidden className="text-ember-deep">✓</span>
-      <div className="text-right">
-        <div className="font-display text-sm uppercase tracking-[0.22em] text-ember-deep">
-          You&apos;re in
+    <div className="flex flex-col items-center gap-2 self-center text-center">
+      <motion.div
+        initial={{ scale: 1.7, rotate: -16, opacity: 0 }}
+        animate={{ scale: 1, rotate: -6, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 520, damping: 17, mass: 0.7 }}
+        className="relative flex h-20 w-20 items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_30%,#e8854b,#c0521f_70%)] text-parchment shadow-[0_6px_16px_-4px_rgba(0,0,0,0.55),inset_0_2px_6px_rgba(255,255,255,0.25),inset_0_-4px_8px_rgba(0,0,0,0.35)] ring-2 ring-ember-deep/60"
+      >
+        {/* Scalloped wax rim */}
+        <span
+          aria-hidden
+          className="absolute inset-0 rounded-full border border-dashed border-parchment/30"
+        />
+        <span aria-hidden className="text-3xl leading-none drop-shadow">
+          ⚔
+        </span>
+      </motion.div>
+      <div>
+        <div className="font-display text-sm uppercase tracking-[0.26em] text-ember-deep">
+          Quest Accepted
         </div>
-        <div className="text-[11px] text-ink-soft/80">An adventure awaits 🤍</div>
+        <div className="mt-0.5 max-w-[18rem] font-serif text-[12px] italic text-ink-soft/85">
+          {line}
+        </div>
       </div>
+      {ending.image ? (
+        <motion.figure
+          initial={{ opacity: 0, scale: 0.9, y: 6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ delay: 0.28, type: "spring", stiffness: 260, damping: 22 }}
+          className="m-0 mt-1"
+        >
+          {/* Sender-supplied celebratory image, baked into the bundle. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={ending.image}
+            alt="A celebration from the sender"
+            className="max-h-52 w-full rounded-md object-contain ring-1 ring-ink/15"
+          />
+        </motion.figure>
+      ) : null}
     </div>
   );
 }

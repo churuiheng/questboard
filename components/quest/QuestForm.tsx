@@ -1,10 +1,12 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import type {
   QuestBundle,
   QuestDifficulty,
+  QuestEnding,
   QuestNote,
   QuestOption,
 } from "@/types/quest";
@@ -24,6 +26,20 @@ import {
 } from "@/lib/imageNote";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/Field";
 import { CalendarDropdown } from "@/components/quest/CalendarDropdown";
+
+// Leaflet touches `window` and ships its own CSS — load it only when the
+// Location note variant is actually used, and never on the server.
+const LocationPicker = dynamic(
+  () => import("./LocationPicker").then((m) => m.LocationPicker),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-56 w-full items-center justify-center rounded-lg border border-parchment/15 bg-ink/40 text-[11px] text-parchment/45">
+        Loading map…
+      </div>
+    ),
+  },
+);
 
 type Props = {
   value: QuestBundle;
@@ -75,9 +91,11 @@ export function QuestForm({ value, onChange }: Props) {
     });
   }
 
+  const ending = value.ending ?? { message: "", image: "" };
+
   return (
     <form
-      className="flex flex-col gap-4"
+      className="flex flex-col gap-3"
       onSubmit={(e) => e.preventDefault()}
     >
       {/* WHO — the one required text input */}
@@ -106,7 +124,10 @@ export function QuestForm({ value, onChange }: Props) {
         ) : null}
       </SectionCard>
 
-      {/* QUEST OPTIONS — each is a self-contained mini-editor */}
+      {/* QUEST OPTIONS — each is a self-contained mini-editor. Short
+          fields sit two-up on a grid so the whole form stays compact
+          instead of one long scroll; full-width rows (the quest line,
+          the note editor) span both columns. */}
       <SectionCard
         label={
           value.options.length === 1
@@ -114,7 +135,7 @@ export function QuestForm({ value, onChange }: Props) {
             : `Quest options · ${value.options.length}`
         }
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <AnimatePresence initial={false}>
             {value.options.map((option, index) => (
               <motion.div
@@ -124,7 +145,7 @@ export function QuestForm({ value, onChange }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
-                className="flex flex-col gap-4 rounded-xl border border-parchment/10 bg-ink/20 p-4"
+                className="flex flex-col gap-3 rounded-xl border border-parchment/10 bg-ink/20 p-3.5"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/70">
@@ -144,108 +165,120 @@ export function QuestForm({ value, onChange }: Props) {
                   ) : null}
                 </div>
 
-                {/* TITLE */}
-                <Field label="Title">
-                  <TextInput
-                    value={option.title}
-                    maxLength={fieldLimits.title}
-                    placeholder="The Great Ramen Expedition"
-                    onChange={(e) =>
-                      patchOption(index, { title: e.target.value })
-                    }
-                  />
-                </Field>
-
-                {/* VIBE (difficulty) — moved up below title so the user
-                    picks a tone before sketching the quest itself. */}
-                <Field label="Vibe">
-                  <Select
-                    value={option.difficulty}
-                    onChange={(e) =>
-                      patchOption(index, {
-                        difficulty: e.target.value as QuestDifficulty,
-                      })
-                    }
-                    aria-label="Vibe"
-                  >
-                    {difficultyOptions.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label} — {d.blurb}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-
-                {/* ACTIVITY — input + randomize square */}
-                <Field label="The quest">
-                  <InputWithAction>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* TITLE */}
+                  <Field label="Title">
                     <TextInput
-                      value={option.activity}
-                      maxLength={fieldLimits.activity}
-                      placeholder="Ramen dinner at the cozy spot downtown"
+                      value={option.title}
+                      maxLength={fieldLimits.title}
+                      placeholder="The Great Ramen Expedition"
                       onChange={(e) =>
-                        patchOption(index, { activity: e.target.value })
+                        patchOption(index, { title: e.target.value })
                       }
                     />
-                    <RandomizeButton
-                      label="Randomize the quest"
-                      onClick={() => {
-                        const preset = pickRandom(activityPresets, option.activity);
-                        patchOption(index, { activity: preset.activity });
-                      }}
-                    />
-                  </InputWithAction>
-                </Field>
+                  </Field>
 
-                {/* WHEN — input + calendar dropdown (presets + native
-                    datetime live inside the popover) */}
-                <Field label="When">
-                  <InputWithAction>
-                    <TextInput
-                      value={option.dateTimeText}
-                      maxLength={fieldLimits.dateTimeText}
-                      placeholder="Friday night around 7"
+                  {/* VIBE (difficulty) */}
+                  <Field label="Vibe">
+                    <Select
+                      value={option.difficulty}
                       onChange={(e) =>
-                        patchOption(index, { dateTimeText: e.target.value })
+                        patchOption(index, {
+                          difficulty: e.target.value as QuestDifficulty,
+                        })
                       }
-                    />
-                    <CalendarDropdown
-                      value={option.dateTimeText}
-                      onPick={(formatted) =>
-                        patchOption(index, { dateTimeText: formatted })
-                      }
-                    />
-                  </InputWithAction>
-                </Field>
+                      aria-label="Vibe"
+                    >
+                      {difficultyOptions.map((d) => (
+                        <option key={d.value} value={d.value}>
+                          {d.label} — {d.blurb}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
 
-                {/* REWARD — input + randomize square */}
-                <Field label="Reward">
-                  <InputWithAction>
-                    <TextInput
-                      value={option.reward}
-                      maxLength={fieldLimits.reward}
-                      placeholder="+50 Happiness · The best night out"
-                      onChange={(e) =>
-                        patchOption(index, { reward: e.target.value })
-                      }
-                    />
-                    <RandomizeButton
-                      label="Randomize the reward"
-                      onClick={() => {
-                        const next = pickRandomString(rewardPresets, option.reward);
-                        patchOption(index, { reward: next });
-                      }}
-                    />
-                  </InputWithAction>
-                </Field>
+                  {/* ACTIVITY — full width, input + randomize square */}
+                  <div className="sm:col-span-2">
+                    <Field label="The quest">
+                      <InputWithAction>
+                        <TextInput
+                          value={option.activity}
+                          maxLength={fieldLimits.activity}
+                          placeholder="Ramen dinner at the cozy spot downtown"
+                          onChange={(e) =>
+                            patchOption(index, { activity: e.target.value })
+                          }
+                        />
+                        <RandomizeButton
+                          label="Randomize the quest"
+                          onClick={() => {
+                            const preset = pickRandom(
+                              activityPresets,
+                              option.activity,
+                            );
+                            patchOption(index, { activity: preset.activity });
+                          }}
+                        />
+                      </InputWithAction>
+                    </Field>
+                  </div>
 
-                {/* NOTE — text or image variant */}
-                <Field label="Note">
-                  <NoteEditor
-                    note={option.note}
-                    onChange={(note) => patchOption(index, { note })}
-                  />
-                </Field>
+                  {/* WHEN — input + calendar dropdown */}
+                  <Field label="When">
+                    <InputWithAction>
+                      <TextInput
+                        value={option.dateTimeText}
+                        maxLength={fieldLimits.dateTimeText}
+                        placeholder="Friday night around 7"
+                        onChange={(e) =>
+                          patchOption(index, {
+                            dateTimeText: e.target.value,
+                          })
+                        }
+                      />
+                      <CalendarDropdown
+                        value={option.dateTimeText}
+                        onPick={(formatted) =>
+                          patchOption(index, { dateTimeText: formatted })
+                        }
+                      />
+                    </InputWithAction>
+                  </Field>
+
+                  {/* REWARD — input + randomize square */}
+                  <Field label="Reward">
+                    <InputWithAction>
+                      <TextInput
+                        value={option.reward}
+                        maxLength={fieldLimits.reward}
+                        placeholder="+50 Happiness · The best night out"
+                        onChange={(e) =>
+                          patchOption(index, { reward: e.target.value })
+                        }
+                      />
+                      <RandomizeButton
+                        label="Randomize the reward"
+                        onClick={() => {
+                          const next = pickRandomString(
+                            rewardPresets,
+                            option.reward,
+                          );
+                          patchOption(index, { reward: next });
+                        }}
+                      />
+                    </InputWithAction>
+                  </Field>
+
+                  {/* NOTE — full width, text/image/location variant */}
+                  <div className="sm:col-span-2">
+                    <Field label="Note">
+                      <NoteEditor
+                        note={option.note}
+                        onChange={(note) => patchOption(index, { note })}
+                      />
+                    </Field>
+                  </div>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -273,6 +306,14 @@ export function QuestForm({ value, onChange }: Props) {
             </p>
           )}
         </div>
+      </SectionCard>
+
+      {/* ENDING — the customizable post-accept celebration. */}
+      <SectionCard label="The ending — what they see on accept">
+        <EndingEditor
+          value={ending}
+          onChange={(next) => patchBundle({ ending: next })}
+        />
       </SectionCard>
 
       {/* SENDER */}
@@ -498,30 +539,29 @@ function NoteEditor({
             maxLength={fieldLimits.place}
             placeholder="Place name — e.g. The Cozy Ramen Spot"
             aria-label="Place name"
-            onChange={(e) =>
-              onChange({
-                kind: "location",
-                place: e.target.value,
-                address: note.address,
-              })
-            }
+            onChange={(e) => onChange({ ...note, place: e.target.value })}
           />
           <TextInput
             value={note.address}
             maxLength={fieldLimits.address}
             placeholder="Address or area (optional)"
             aria-label="Address"
-            onChange={(e) =>
-              onChange({
-                kind: "location",
-                place: note.place,
-                address: e.target.value,
-              })
-            }
+            onChange={(e) => onChange({ ...note, address: e.target.value })}
+          />
+          <LocationPicker
+            value={{ lat: note.lat, lng: note.lng }}
+            onChange={({ lat, lng }) => onChange({ ...note, lat, lng })}
+            onClear={() => {
+              const { lat: _lat, lng: _lng, ...rest } = note;
+              void _lat;
+              void _lng;
+              onChange(rest);
+            }}
           />
           <p className="text-[11px] text-parchment/45">
-            We&apos;ll add an &ldquo;Open in Maps&rdquo; link from whatever
-            you type — no map is stored, so it stays a tiny link.
+            {note.lat !== undefined
+              ? "Pinned ✓ — the “Open in Maps” link will land on this exact spot."
+              : "Drop a pin (or type a place) and we’ll add an “Open in Maps” link. No map image is stored, so the link stays tiny."}
           </p>
         </div>
       )}
@@ -560,6 +600,154 @@ function NoteKindToggle({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ ending editor */
+
+/**
+ * Bundle-level editor for the post-accept celebration: a custom line
+ * (blank → a randomized cheer at render time) and an optional
+ * celebratory image, compressed into the share URL the same way image
+ * notes are. A small static preview mirrors what the recipient gets the
+ * moment they hit Accept (the live animated version is the wax seal in
+ * QuestCardOverlay).
+ */
+function EndingEditor({
+  value,
+  onChange,
+}: {
+  value: QuestEnding;
+  onChange: (next: QuestEnding) => void;
+}) {
+  const inputId = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const dataUrl = await fileToImageNoteDataUrl(file);
+      onChange({ ...value, image: dataUrl });
+    } catch (err) {
+      setError(
+        isImageNoteError(err)
+          ? describeImageNoteError(err)
+          : "Couldn't process that image.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-1 flex-col gap-2">
+        <div className="relative w-full">
+          <TextArea
+            value={value.message}
+            maxLength={fieldLimits.endingMessage}
+            placeholder="What they see the moment they accept… (leave blank for a surprise cheer)"
+            onChange={(e) => onChange({ ...value, message: e.target.value })}
+          />
+          <CharCounter
+            current={value.message.length}
+            max={fieldLimits.endingMessage}
+          />
+        </div>
+
+        {value.image ? (
+          <div className="relative overflow-hidden rounded-lg border border-parchment/15 bg-ink/40">
+            {/* Data-URL preview baked into the bundle. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={value.image}
+              alt="Your celebration image"
+              className="max-h-40 w-full object-contain"
+            />
+            <div className="absolute right-2 top-2 flex gap-1.5">
+              <label
+                htmlFor={inputId}
+                className="cursor-pointer rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
+              >
+                {busy ? "Shrinking…" : "Replace"}
+              </label>
+              <button
+                type="button"
+                onClick={() => onChange({ ...value, image: "" })}
+                className="rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <label
+            htmlFor={inputId}
+            className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-parchment/25 bg-ink/30 px-4 py-3 text-center transition hover:border-gold/50"
+          >
+            <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/80">
+              {busy ? "Shrinking…" : "Add a celebration image (optional)"}
+            </span>
+          </label>
+        )}
+
+        <input
+          id={inputId}
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          disabled={busy}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.currentTarget.value = "";
+            handleFile(f);
+          }}
+        />
+
+        {error ? (
+          <p className="text-[11px] text-ember" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+
+      <EndingPreview value={value} />
+    </div>
+  );
+}
+
+/** Static "this is what they'll see" mini-card for the ending. */
+function EndingPreview({ value }: { value: QuestEnding }) {
+  return (
+    <div className="w-full shrink-0 self-start rounded-lg bg-parchment p-3 text-ink shadow-inner ring-1 ring-ink/10 sm:w-48">
+      <div className="mx-auto flex h-10 w-10 -rotate-6 items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_30%,#e8854b,#c0521f_70%)] text-parchment ring-1 ring-ember-deep/60">
+        <span aria-hidden className="text-lg leading-none">
+          ⚔
+        </span>
+      </div>
+      <div className="mt-1.5 text-center font-display text-[9px] uppercase tracking-[0.22em] text-ember-deep">
+        Quest Accepted
+      </div>
+      <p
+        className={
+          "mt-0.5 text-center font-serif text-[11px] italic " +
+          (value.message.trim() ? "text-ink-soft" : "text-ink/40")
+        }
+      >
+        {value.message.trim() || "A surprise cheer ✨"}
+      </p>
+      {value.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={value.image}
+          alt=""
+          className="mt-1.5 max-h-24 w-full rounded object-contain ring-1 ring-ink/15"
+        />
+      ) : null}
     </div>
   );
 }

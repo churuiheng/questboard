@@ -9,11 +9,21 @@
  */
 
 /**
- * Build an "Open in Maps" URL from the place + address. Returns null
- * when there's nothing to search for yet (so callers can hide the link
- * rather than render a dead one).
+ * Build an "Open in Maps" URL. When the sender pinned an exact spot
+ * (lat/lng from the map or "Use my location") we use the coordinates so
+ * it lands precisely; otherwise we fall back to a text search of the
+ * place + address. Returns null when there's nothing to point at yet,
+ * so callers can hide the link rather than render a dead one.
  */
-export function buildMapsUrl(place: string, address: string): string | null {
+export function buildMapsUrl(
+  place: string,
+  address: string,
+  lat?: number,
+  lng?: number,
+): string | null {
+  if (typeof lat === "number" && typeof lng === "number") {
+    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  }
   const query = [place.trim(), address.trim()].filter(Boolean).join(", ");
   if (!query) return null;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;

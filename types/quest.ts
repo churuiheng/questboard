@@ -23,9 +23,12 @@ export type QuestTheme = "tavern" | "forest" | "pixel";
  *                  stored as a compressed data-URL — see
  *                  `lib/imageNote.ts`. `caption` is optional flavor
  *                  text shown beneath it ("" when none).
- *   - `location` — a place note: `place` name + optional `address`.
- *                  Rendered with an auto-built "Open in Maps" link
- *                  (`lib/location.ts`). Pure text, tiny URL footprint.
+ *   - `location` — a place note: `place` name + optional `address`,
+ *                  plus optional `lat`/`lng` when the sender pinned it
+ *                  on the map or used "Use my location". Coords (when
+ *                  present) make the "Open in Maps" link exact
+ *                  (`lib/location.ts`). Still tiny in the URL — coords
+ *                  are ~20 chars, no map image is stored.
  *
  * To add a variation later, add a member here and handle its `kind` in
  * the codec guard (questCodec), the draft guard (draft.ts), the form
@@ -35,9 +38,33 @@ export type QuestTheme = "tavern" | "forest" | "pixel";
 export type QuestNote =
   | { kind: "text"; text: string }
   | { kind: "image"; image: string; caption: string }
-  | { kind: "location"; place: string; address: string };
+  | {
+      kind: "location";
+      place: string;
+      address: string;
+      lat?: number;
+      lng?: number;
+    };
 
 export type QuestNoteKind = QuestNote["kind"];
+
+/**
+ * The sender-customized celebration the recipient sees the instant they
+ * accept (the wax-seal moment). Bundle-level — one ending per invite,
+ * shared across all options.
+ *
+ *   - `message` — the sender's celebration line. "" falls back to a
+ *                 randomized cheer (`pickAcceptanceCheer`).
+ *   - `image`   — optional celebratory picture, stored as a compressed
+ *                 data-URL the same way image notes are ("" = none).
+ *
+ * Optional on the bundle so links/drafts made before this existed still
+ * decode; `bundleToQuestData` fills a blank default when it's absent.
+ */
+export type QuestEnding = {
+  message: string;
+  image: string;
+};
 
 /**
  * Per-option fields. Each scroll on the board is one of these.
@@ -60,6 +87,8 @@ export type QuestBundle = {
   theme: QuestTheme;
   createdAt: string;
   options: QuestOption[];
+  /** Sender-customized accept celebration. Absent on legacy links. */
+  ending?: QuestEnding;
 };
 
 /**
@@ -76,6 +105,8 @@ export type QuestData = {
   reward: string;
   difficulty: QuestDifficulty;
   note: QuestNote;
+  /** Always present after projection — blank default when the bundle has none. */
+  ending: QuestEnding;
   theme: QuestTheme;
   createdAt: string;
 };
