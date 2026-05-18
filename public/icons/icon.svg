@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!--
+    QuestBoard app icon. Parchment scroll with two gold rules + a
+    glowing ✦ centerpiece, against the deep ink background. Same
+    palette as the live app so the home-screen icon reads as the
+    same product.
+  -->
+  <rect width="512" height="512" fill="#1a0e05" />
+
+  <!-- Drop shadow under the parchment -->
+  <rect x="156" y="128" width="220" height="276" rx="22" fill="#0a0503" opacity="0.55" />
+
+  <!-- Parchment poster -->
+  <rect x="148" y="116" width="216" height="276" rx="22" fill="#f3e1bb" />
+
+  <!-- Aged tone overlay (cream → warmer cream) -->
+  <rect x="148" y="116" width="216" height="276" rx="22" fill="url(#parchment)" />
+
+  <!-- Top + bottom gold rules -->
+  <rect x="184" y="174" width="144" height="5" fill="#c9a060" />
+  <rect x="184" y="329" width="144" height="5" fill="#c9a060" />
+
+  <!-- Brass nails at corners -->
+  <g>
+    <circle cx="172" cy="140" r="10" fill="#1a0e05" />
+    <circle cx="172" cy="140" r="6.5" fill="#c9a060" />
+    <circle cx="340" cy="140" r="10" fill="#1a0e05" />
+    <circle cx="340" cy="140" r="6.5" fill="#c9a060" />
+    <circle cx="172" cy="368" r="10" fill="#1a0e05" />
+    <circle cx="172" cy="368" r="6.5" fill="#c9a060" />
+    <circle cx="340" cy="368" r="10" fill="#1a0e05" />
+    <circle cx="340" cy="368" r="6.5" fill="#c9a060" />
+  </g>
+
+  <!-- Centerpiece ✦ -->
+  <text
+    x="256"
+    y="282"
+    font-family="Cinzel, Georgia, serif"
+    font-size="120"
+    font-weight="700"
+    fill="#2a1a0c"
+    text-anchor="middle"
+  >✦</text>
+
+  <!-- Soft gold glow behind the star -->
+  <circle cx="256" cy="254" r="56" fill="#e6b352" opacity="0.18" />
+
+  <defs>
+    <linearGradient id="parchment" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3e1bb" stop-opacity="0" />
+      <stop offset="100%" stop-color="#caa066" stop-opacity="0.18" />
+    </linearGradient>
+  </defs>
+</svg>

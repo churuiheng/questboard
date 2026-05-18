@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import type {
   QuestBundle,
-  QuestDifficulty,
   QuestEnding,
   QuestNote,
   QuestOption,
@@ -13,7 +12,6 @@ import type {
 import {
   MAX_OPTIONS,
   activityPresets,
-  difficultyOptions,
   fieldLimits,
   makeDefaultQuestOption,
   messageTemplates,
@@ -24,8 +22,9 @@ import {
   fileToImageNoteDataUrl,
   isImageNoteError,
 } from "@/lib/imageNote";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/Field";
+import { Field, TextArea, TextInput } from "@/components/ui/Field";
 import { CalendarDropdown } from "@/components/quest/CalendarDropdown";
+import { VibeDropdown } from "@/components/quest/VibeDropdown";
 
 // Leaflet touches `window` and ships its own CSS — load it only when the
 // Location note variant is actually used, and never on the server.
@@ -178,23 +177,15 @@ export function QuestForm({ value, onChange }: Props) {
                     />
                   </Field>
 
-                  {/* VIBE (difficulty) */}
+                  {/* VIBE (difficulty) — custom popover matching the
+                      CalendarDropdown's parchment/ink/gold look. */}
                   <Field label="Vibe">
-                    <Select
+                    <VibeDropdown
                       value={option.difficulty}
-                      onChange={(e) =>
-                        patchOption(index, {
-                          difficulty: e.target.value as QuestDifficulty,
-                        })
+                      onChange={(next) =>
+                        patchOption(index, { difficulty: next })
                       }
-                      aria-label="Vibe"
-                    >
-                      {difficultyOptions.map((d) => (
-                        <option key={d.value} value={d.value}>
-                          {d.label} — {d.blurb}
-                        </option>
-                      ))}
-                    </Select>
+                    />
                   </Field>
 
                   {/* ACTIVITY — full width, input + randomize square */}

@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { PageBackground } from "@/components/ui/PageBackground";
+import { PWARegister } from "@/components/PWARegister";
 import "./globals.css";
 
 /**
@@ -22,6 +23,14 @@ export const metadata: Metadata = {
   title: "QuestBoard — Turn invites into tiny RPG quests",
   description:
     "Send friends a playful quest invite. Build your card, share the link, watch them accept the quest.",
+  manifest: "/manifest.webmanifest",
+  // Apple-specific PWA hints — Android/Chrome use the manifest above,
+  // but iOS Safari still reads these standalone-mode meta tags.
+  appleWebApp: {
+    capable: true,
+    title: "QuestBoard",
+    statusBarStyle: "black-translucent",
+  },
   openGraph: {
     title: "QuestBoard — Turn invites into tiny RPG quests",
     description:
@@ -36,6 +45,10 @@ export const metadata: Metadata = {
       "Send friends a playful quest invite. Build your card, share the link, watch them accept the quest.",
     images: ["/og"],
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1a0e05",
 };
 
 export default function RootLayout({
@@ -63,6 +76,10 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <PageBackground />
+        {/* Registers the service worker in production. Silent and
+            renders nothing — toggle off with NEXT_PUBLIC_ENABLE_SW=0
+            if it ever causes trouble in the field. */}
+        <PWARegister />
         {children}
       </body>
     </html>

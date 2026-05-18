@@ -5,11 +5,16 @@ import { AnimatePresence, motion } from "framer-motion";
 import { QuestCard } from "./QuestCard";
 import { Typewriter } from "./Typewriter";
 import { SparkleBurst } from "./SparkleBurst";
+import { Confetti } from "./Confetti";
 import { ShareReplyButton } from "./ShareReplyButton";
+import { CalendarExportButton } from "./CalendarExportButton";
+import { SendOneBackButton } from "./SendOneBackButton";
+import { QuestFailedOverlay } from "./QuestFailedOverlay";
 import { Button } from "@/components/ui/Button";
+import { useSfx } from "@/components/scene/useSfx";
 import { buildMapsUrl } from "@/lib/location";
 import { pickAcceptanceCheer } from "@/lib/questDefaults";
-import type { BundleResponse, QuestData } from "@/types/quest";
+import type { BundleResponse, QuestData, QuestDifficulty } from "@/types/quest";
 
 type Props = {
   quest: QuestData;
@@ -19,7 +24,6 @@ type Props = {
   response: BundleResponse | null;
   onClose: () => void;
   onAccept: () => void;
-  onDefer: () => void;
   onResetResponse: () => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -44,7 +48,6 @@ export function QuestCardOverlay({
   response,
   onClose,
   onAccept,
-  onDefer,
   onResetResponse,
   onPrev,
   onNext,
@@ -53,17 +56,33 @@ export function QuestCardOverlay({
     "card",
   );
   const [sparkleKey, setSparkleKey] = useState(0);
+  // When true, the "Quest Failed · Press F to revive" easter egg covers
+  // the card. Maybe Later flips this on locally — nothing is persisted
+  // until the user explicitly accepts. Try Again flips it back off and
+  // the user is right back at the live buttons.
+  const [questFailed, setQuestFailed] = useState(false);
+
+  // Soft quill-scribble plays once when the typewriter starts. HEAD-
+  // checked via useSfx, so it's silent if the asset isn't present.
+  const playQuill = useSfx("/audio/quill_scribble.mp3");
 
   // Pagination remounts this component via the parent's `key` prop, so
   // `revealStage` resets to "card" naturally — we just need to schedule
   // the timed transitions.
+  // playQuill is a stable callback from useSfx; including it would
+  // re-bind the effect on every re-render, restarting the reveal
+  // animation. We want this to run exactly once per mount.
   useEffect(() => {
-    const t1 = window.setTimeout(() => setRevealStage("message"), 450);
+    const t1 = window.setTimeout(() => {
+      setRevealStage("message");
+      playQuill();
+    }, 450);
     const t2 = window.setTimeout(() => setRevealStage("choices"), 1100);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleAccept() {
@@ -115,7 +134,19 @@ export function QuestCardOverlay({
         transition={{ type: "spring", stiffness: 130, damping: 20, mass: 0.9 }}
         className="relative w-full max-w-xl"
       >
-        {sparkleKey > 0 ? <SparkleBurst triggerKey={sparkleKey} /> : null}
+        {sparkleKey > 0 ? (
+          <>
+            {/* Two stacked bursts: SparkleBurst gives the fast golden
+                "stamp" flash next to the wax seal, Confetti rains down
+                in the quest's difficulty color for the choice-specific
+                payoff. */}
+            <SparkleBurst triggerKey={sparkleKey} />
+            <Confetti
+              triggerKey={sparkleKey}
+              difficulty={quest.difficulty}
+            />
+          </>
+        ) : null}
 
         <QuestCard
           data={quest}
@@ -206,7 +237,11 @@ export function QuestCardOverlay({
                     className="flex flex-col gap-2 sm:flex-row sm:justify-end"
                   >
                     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                      <Button variant="ghost-ink" size="lg" onClick={onDefer}>
+                      <Button
+                        variant="ghost-ink"
+                        size="lg"
+                        onClick={() => setQuestFailed(true)}
+                      >
                         Maybe later
                       </Button>
                     </motion.div>
@@ -231,8 +266,16 @@ export function QuestCardOverlay({
                     transition={{ duration: 0.4 }}
                     className="flex flex-col items-center gap-3"
                   >
-                    <AcceptedBanner ending={quest.ending} cheer={cheer} />
-                    <ShareReplyButton quest={quest} />
+                    <AcceptedBanner
+                      ending={quest.ending}
+                      cheer={cheer}
+                      difficulty={quest.difficulty}
+                    />
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <CalendarExportButton quest={quest} />
+                      <ShareReplyButton quest={quest} />
+                      <SendOneBackButton quest={quest} />
+                    </div>
                     <button
                       onClick={onResetResponse}
                       className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft/60 underline-offset-2 hover:text-ink-soft hover:underline"
@@ -292,6 +335,19 @@ export function QuestCardOverlay({
         >
           <span aria-hidden className="text-lg leading-none">×</span>
         </button>
+
+        {/* Quest Failed easter egg — covers the card when Maybe Later
+            is tapped. Closes (back to the live card) on Try Again, F,
+            or Escape. Stays scoped to this overlay so the rest of the
+            scene isn't affected. */}
+        <AnimatePresence>
+          {questFailed ? (
+            <QuestFailedOverlay
+              seed={`${quest.title}:${index}`}
+              onTryAgain={() => setQuestFailed(false)}
+            />
+          ) : null}
+        </AnimatePresence>
 
         {/* Pagination — arrow buttons flanking animated dot indicators. */}
         {total > 1 ? (
@@ -354,40 +410,109 @@ export function QuestCardOverlay({
 /* ----------------- Banners ----------------- */
 
 /**
+ * Wax-seal design keyed to each difficulty. The glyph + gradient + ring
+ * together convey "this acceptance is for *this kind of quest*", so a
+ * cozy ramen accept reads in deep green with a leaf, a legendary quest
+ * stamps a dragon in deep ember, a secret mission seals in royal
+ * purple with an old key. The "Quest Accepted" label inherits the same
+ * deep-tone color so the whole banner reads as one piece.
+ *
+ * Gradients tuned to keep enough contrast for a parchment-white glyph
+ * — the outer (darker) color sits around L*30, the inner highlight
+ * around L*60.
+ */
+/**
+ * Wax-seal palette keyed to difficulty. The glyph is the same ✦ star
+ * the rest of the theme uses for dividers — emoji glyphs (🌿🐉🗝)
+ * felt out of place against the Cinzel/parchment aesthetic, so we
+ * lean on color alone to whisper which kind of quest got accepted.
+ *
+ * Gradients tuned to keep enough contrast for a parchment-cream
+ * glyph — the outer (darker) color sits around L*30, the inner
+ * highlight around L*60.
+ */
+const SEAL_DESIGN: Record<
+  QuestDifficulty,
+  { gradient: string; deep: string; ariaLabel: string }
+> = {
+  cozy: {
+    gradient: "radial-gradient(circle at 35% 30%,#a3c065,#4d6b2c 70%)",
+    deep: "#3e5a22",
+    ariaLabel: "Cozy quest accepted",
+  },
+  normal: {
+    gradient: "radial-gradient(circle at 35% 30%,#e8854b,#c0521f 70%)",
+    deep: "#8a3a16",
+    ariaLabel: "Quest accepted",
+  },
+  legendary: {
+    gradient: "radial-gradient(circle at 35% 30%,#e36c3e,#8a2a14 70%)",
+    deep: "#6b1f10",
+    ariaLabel: "Legendary quest accepted",
+  },
+  secret: {
+    gradient: "radial-gradient(circle at 35% 30%,#a78dc4,#4e2e62 70%)",
+    deep: "#3d2150",
+    ariaLabel: "Secret mission accepted",
+  },
+};
+
+/**
  * The payoff. Since nothing is sent to a server, the reward for
  * accepting is the moment itself: a wax seal "stamps" down onto the
- * parchment with a spring overshoot. The sender can customize it — a
- * written line (falls back to a randomized cheer) and an optional
- * celebratory image, both carried in the bundle's `ending`.
- * (SparkleBurst fires alongside this from the parent.)
+ * parchment with a spring overshoot. The seal is themed by difficulty
+ * (see `SEAL_DESIGN`) so each acceptance feels specific. The sender
+ * can customize the line + image via the bundle's `ending`.
+ * (SparkleBurst + difficulty-tinted Confetti fire alongside this from
+ * the parent.)
  */
 function AcceptedBanner({
   ending,
   cheer,
+  difficulty,
 }: {
   ending: QuestData["ending"];
   cheer: string;
+  difficulty: QuestDifficulty;
 }) {
   const line = ending.message.trim() || cheer;
+  const design = SEAL_DESIGN[difficulty];
   return (
     <div className="flex flex-col items-center gap-2 self-center text-center">
       <motion.div
         initial={{ scale: 1.7, rotate: -16, opacity: 0 }}
         animate={{ scale: 1, rotate: -6, opacity: 1 }}
         transition={{ type: "spring", stiffness: 520, damping: 17, mass: 0.7 }}
-        className="relative flex h-20 w-20 items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_30%,#e8854b,#c0521f_70%)] text-parchment shadow-[0_6px_16px_-4px_rgba(0,0,0,0.55),inset_0_2px_6px_rgba(255,255,255,0.25),inset_0_-4px_8px_rgba(0,0,0,0.35)] ring-2 ring-ember-deep/60"
+        aria-label={design.ariaLabel}
+        role="img"
+        className="relative flex h-20 w-20 items-center justify-center rounded-full text-parchment shadow-[0_6px_16px_-4px_rgba(0,0,0,0.55),inset_0_2px_6px_rgba(255,255,255,0.25),inset_0_-4px_8px_rgba(0,0,0,0.35)] ring-2"
+        style={{
+          backgroundImage: design.gradient,
+          // Tailwind can't do dynamic ring colors with arbitrary hex,
+          // so we set it via CSS variable here (Tailwind reads
+          // --tw-ring-color).
+          ["--tw-ring-color" as string]: `${design.deep}99`,
+        }}
       >
         {/* Scalloped wax rim */}
         <span
           aria-hidden
           className="absolute inset-0 rounded-full border border-dashed border-parchment/30"
         />
-        <span aria-hidden className="text-3xl leading-none drop-shadow">
-          ⚔
+        {/* The theme's signature ✦ star — same dingbat used as
+            dividers across the card. Cream-on-wax. */}
+        <span
+          aria-hidden
+          className="font-display text-3xl font-bold leading-none text-parchment drop-shadow"
+        >
+          ✦
         </span>
       </motion.div>
       <div>
-        <div className="font-display text-sm uppercase tracking-[0.26em] text-ember-deep">
+        <div
+          className="font-display text-sm uppercase tracking-[0.26em]"
+          style={{ color: design.deep }}
+        >
           Quest Accepted
         </div>
         <div className="mt-0.5 max-w-[18rem] font-serif text-[12px] italic text-ink-soft/85">

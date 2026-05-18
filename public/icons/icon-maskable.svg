@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!--
+    Maskable variant of the QuestBoard icon. The safe zone for
+    maskable icons is the inner 80% (rect from 51,51 to 461,461);
+    Android may crop anything outside that into a circle / squircle.
+    We keep the parchment + glyph well inside that zone and let the
+    deep-ink background bleed to the edges.
+  -->
+  <rect width="512" height="512" fill="#1a0e05" />
+
+  <!-- Parchment posters scale to ~70% so it survives circular masks -->
+  <rect x="170" y="148" width="172" height="216" rx="18" fill="#f3e1bb" />
+  <rect x="170" y="148" width="172" height="216" rx="18" fill="url(#parchment-m)" />
+
+  <!-- Gold rules -->
+  <rect x="200" y="194" width="112" height="4" fill="#c9a060" />
+  <rect x="200" y="318" width="112" height="4" fill="#c9a060" />
+
+  <!-- Brass nails -->
+  <g>
+    <circle cx="190" cy="170" r="8" fill="#1a0e05" />
+    <circle cx="190" cy="170" r="5" fill="#c9a060" />
+    <circle cx="322" cy="170" r="8" fill="#1a0e05" />
+    <circle cx="322" cy="170" r="5" fill="#c9a060" />
+    <circle cx="190" cy="342" r="8" fill="#1a0e05" />
+    <circle cx="190" cy="342" r="5" fill="#c9a060" />
+    <circle cx="322" cy="342" r="8" fill="#1a0e05" />
+    <circle cx="322" cy="342" r="5" fill="#c9a060" />
+  </g>
+
+  <!-- Centerpiece ✦ -->
+  <text
+    x="256"
+    y="282"
+    font-family="Cinzel, Georgia, serif"
+    font-size="96"
+    font-weight="700"
+    fill="#2a1a0c"
+    text-anchor="middle"
+  >✦</text>
+  <circle cx="256" cy="256" r="44" fill="#e6b352" opacity="0.18" />
+
+  <defs>
+    <linearGradient id="parchment-m" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3e1bb" stop-opacity="0" />
+      <stop offset="100%" stop-color="#caa066" stop-opacity="0.18" />
+    </linearGradient>
+  </defs>
+</svg>

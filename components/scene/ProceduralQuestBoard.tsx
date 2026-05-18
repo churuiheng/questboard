@@ -6,6 +6,7 @@ import { Group } from "three";
 import { AssetSlot } from "./AssetSlot";
 import { CustomGLBModel } from "./CustomGLBModel";
 import { ScrollSlot } from "./ScrollSlot";
+import { SCROLL_LAYOUTS } from "@/lib/scrollLayouts";
 import type { QuestData } from "@/types/quest";
 
 type Props = {
@@ -30,20 +31,25 @@ type Props = {
   /* ----- Custom note hover visual ----- */
   noteHoverImageUrl?: string;
   noteHoverImageSize?: number;
+
+  /** Konami easter-egg flag: when true, scrolls cycle through rainbow hues. */
+  rainbow?: boolean;
+
+  /** Index of the scroll to highlight with a first-time hint pulse. */
+  firstHintIndex?: number | null;
+  /** Fires when any scroll is hovered — used to clear the first-time hint. */
+  onAnyHover?: () => void;
 };
 
-const SCROLL_LAYOUTS: Record<number, [number, number][]> = {
-  1: [[0, 0]],
-  2: [
-    [-0.5, 0],
-    [0.5, 0],
-  ],
-  3: [
-    [-0.65, 0],
-    [0, 0],
-    [0.65, 0],
-  ],
-};
+// 2D version derived from the shared 3D layouts (drops the Z). The
+// shared file in lib/ is the single source of truth so the keyboard
+// nav's screen projector stays in sync with what's actually rendered.
+const SCROLL_LAYOUTS_2D: Record<number, [number, number][]> = Object.fromEntries(
+  Object.entries(SCROLL_LAYOUTS).map(([k, positions]) => [
+    k,
+    positions.map(([x, y]) => [x, y] as [number, number]),
+  ]),
+) as Record<number, [number, number][]>;
 
 /**
  * Top-level quest board scene. Renders:
@@ -66,10 +72,13 @@ export function ProceduralQuestBoard({
   noteRotation = [0, 0, 0],
   noteHoverImageUrl = "/textures/note_hover.png",
   noteHoverImageSize = 0.75,
+  rainbow = false,
+  firstHintIndex = null,
+  onAnyHover,
 }: Props) {
   const sceneRef = useRef<Group>(null);
   const clampedCount = Math.min(3, Math.max(1, count));
-  const positions = SCROLL_LAYOUTS[clampedCount];
+  const positions = SCROLL_LAYOUTS_2D[clampedCount];
 
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
@@ -112,7 +121,11 @@ export function ProceduralQuestBoard({
           hovered={hoveredIndex === index}
           highlightNumber={clampedCount > 1 ? index + 1 : null}
           quest={quests?.[index]}
-          onPointerOver={() => setHoveredIndex(index)}
+          onPointerOver={() => {
+            setHoveredIndex(index);
+            // First hover anywhere clears the first-time hint.
+            onAnyHover?.();
+          }}
           onPointerOut={() => setHoveredIndex((curr) => (curr === index ? null : curr))}
           onClick={onSelect ? () => onSelect(index) : undefined}
           noteUrl={noteUrl}
@@ -120,6 +133,8 @@ export function ProceduralQuestBoard({
           noteRotation={noteRotation}
           noteHoverImageUrl={noteHoverImageUrl}
           noteHoverImageSize={noteHoverImageSize}
+          rainbow={rainbow}
+          firstHint={firstHintIndex === index}
         />
       ))}
     </group>

@@ -1,6 +1,5 @@
-import type { QuestData, QuestNote } from "@/types/quest";
+import type { QuestData, QuestDifficulty, QuestNote } from "@/types/quest";
 import { buildMapsUrl } from "@/lib/location";
-import { DifficultyBadge } from "./DifficultyBadge";
 
 type Props = {
   data: QuestData;
@@ -11,18 +10,24 @@ type Props = {
 };
 
 /**
- * The visual centerpiece. It looks like a wooden quest board with a
- * parchment poster nailed to it. Shared between the create page's
- * live preview and the recipient invite page.
+ * The visual centerpiece: a piece of parchment with a quest on it.
  *
- * Empty fields show low-opacity italic placeholders that nudge the
- * sender about what goes there (e.g. "your quest title"), so the
- * card never reads as "done" until they've actually filled it in.
+ * This card was getting noisy — a Quest Notice eyebrow, a difficulty
+ * chip, a ✦ divider, a wood-grain frame ring. We've stripped all that
+ * chrome back. The card now reads as: title, a quiet sub-line that
+ * names the recipient and whispers the difficulty, three stats, and
+ * any footer. The difficulty signal is the same color the wax seal
+ * uses on Accept, so the recipient gets a hint of "what flavor of
+ * quest" without a chip.
+ *
+ * Empty fields still show low-opacity italic placeholders so the card
+ * never reads as "done" until the sender has filled it in.
  */
 export function QuestCard({ data, variant = "preview", footer }: Props) {
-  const sizing = variant === "scene"
-    ? "max-w-xl text-base sm:text-lg"
-    : "max-w-md text-sm sm:text-base";
+  const sizing =
+    variant === "scene"
+      ? "max-w-xl text-base sm:text-lg"
+      : "max-w-md text-sm sm:text-base";
 
   return (
     <div
@@ -32,49 +37,62 @@ export function QuestCard({ data, variant = "preview", footer }: Props) {
     >
       {/* Outer wooden frame */}
       <div className="relative rounded-[28px] bg-gradient-to-b from-[#3a2412] via-[#2a1709] to-[#1a0e05] p-3 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.7)] ring-1 ring-black/40">
-        {/* Inner gold/ember rim */}
-        <div className="relative rounded-[22px] bg-gradient-to-b from-gold/30 via-ember/15 to-gold/30 p-[2px]">
-          {/* Parchment poster */}
-          <div className="paper-noise relative overflow-hidden rounded-[20px] bg-gradient-to-b from-parchment to-parchment-deep px-6 py-6 sm:px-8 sm:py-7 text-ink">
-            {/* Iron nails in corners */}
-            <Nail className="absolute left-3 top-3" />
-            <Nail className="absolute right-3 top-3" />
-            <Nail className="absolute left-3 bottom-3" />
-            <Nail className="absolute right-3 bottom-3" />
+        {/* Parchment poster */}
+        <div className="paper-noise relative overflow-hidden rounded-[20px] bg-gradient-to-b from-parchment to-parchment-deep px-7 py-8 sm:px-10 sm:py-10 text-ink">
+          {/* Iron nails in corners */}
+          <Nail className="absolute left-3 top-3" />
+          <Nail className="absolute right-3 top-3" />
+          <Nail className="absolute left-3 bottom-3" />
+          <Nail className="absolute right-3 bottom-3" />
 
-            {/* Header strip */}
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <span className="font-display text-[10px] uppercase tracking-[0.32em] text-ink-soft">
-                Quest Notice
-              </span>
-              <DifficultyBadge difficulty={data.difficulty} size="sm" />
+          <Heading value={data.title} placeholder="your quest title" />
+
+          <SubLine
+            recipientName={data.recipientName}
+            difficulty={data.difficulty}
+          />
+
+          {/*
+            Centerpiece — the visual zone between the sub-line and
+            the stats. Its shape changes with the note type so the
+            card *feels* different for an image quest vs. a place
+            quest vs. a plain message:
+
+              - text  → a thin gold rule (the note text shows below
+                        the stats as italic quote, current behavior)
+              - image → the actual image, framed in parchment, becomes
+                        the focal point of the poster
+              - place → a tinted "destination" callout with the pin,
+                        place name, and address takes centerstage
+
+            Empty image / location notes fall back to the thin rule
+            so the card still reads cleanly while the sender is
+            mid-edit. Scene variant skips this entirely — the
+            QuestCardOverlay banner shows the note separately there.
+          */}
+          {variant === "preview" ? (
+            <Centerpiece note={data.note} />
+          ) : (
+            <div className="my-5 h-px w-full bg-ink/15" />
+          )}
+
+          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <Stat label="Activity" value={data.activity} placeholder="an activity" />
+            <Stat label="When" value={data.dateTimeText} placeholder="when" />
+            <Stat label="Reward" value={data.reward} placeholder="a reward" />
+          </dl>
+
+          {/* Text notes still surface their quoted message below the
+              stats. Image/location notes already had their content
+              promoted into the centerpiece above, so no second
+              rendering is needed for those. */}
+          {variant === "preview" && shouldShowFooterNote(data.note) ? (
+            <div className="mt-6">
+              <NoteLine note={data.note} />
             </div>
+          ) : null}
 
-            <Heading value={data.title} placeholder="your quest title" />
-
-            <RecipientLine value={data.recipientName} />
-
-            <Divider />
-
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-              <Stat label="Activity" value={data.activity} placeholder="an activity" />
-              <Stat label="When" value={data.dateTimeText} placeholder="when" />
-              <Stat label="Reward" value={data.reward} placeholder="a reward" accent />
-            </dl>
-
-            {/* Message — only shown on the /create live preview. On the
-                /invite overlay (variant="scene") the typewriter banner
-                in QuestCardOverlay shows "A message from [sender]" with
-                the message text, so showing it here too would duplicate. */}
-            {variant === "preview" ? (
-              <>
-                <Divider />
-                <NoteLine note={data.note} />
-              </>
-            ) : null}
-
-            {footer ? <div className="mt-5">{footer}</div> : null}
-          </div>
+          {footer ? <div className="mt-6">{footer}</div> : null}
         </div>
       </div>
     </div>
@@ -93,10 +111,8 @@ function Heading({
   return (
     <h2
       className={
-        "font-display text-2xl sm:text-3xl font-bold leading-tight " +
-        (filled
-          ? "text-ink"
-          : "italic font-medium text-ink/35")
+        "font-display text-3xl sm:text-4xl font-bold leading-[1.05] " +
+        (filled ? "text-ink" : "italic font-medium text-ink/35")
       }
     >
       {filled ? value : placeholder}
@@ -104,19 +120,158 @@ function Heading({
   );
 }
 
-function RecipientLine({ value }: { value: string }) {
-  const filled = value.trim().length > 0;
+/**
+ * One quiet line under the title:  "for Alice · cozy"
+ *
+ * Replaces the old Quest Notice eyebrow + difficulty chip. The
+ * difficulty word is tinted in its wax-seal color so the recipient
+ * still gets a visual hint (green for cozy, purple for secret, etc.)
+ * without chrome.
+ */
+function SubLine({
+  recipientName,
+  difficulty,
+}: {
+  recipientName: string;
+  difficulty: QuestDifficulty;
+}) {
+  const tone = DIFFICULTY_TONE[difficulty];
+  const hasRecipient = recipientName.trim().length > 0;
   return (
-    <p className="mt-1 font-display text-xs uppercase tracking-[0.22em] text-ink-soft">
-      For{" "}
-      {filled ? (
-        <span className="text-ember-deep">{value}</span>
+    <p className="mt-3 font-display text-[11px] uppercase tracking-[0.28em] text-ink-soft">
+      {hasRecipient ? (
+        <>
+          for{" "}
+          <span className="text-ink">{recipientName}</span>
+          <span className="px-2 text-ink/30" aria-hidden>
+            ·
+          </span>
+        </>
       ) : (
-        <span className="italic tracking-normal text-ink/35">
-          (their name)
-        </span>
+        <>
+          <span className="italic tracking-normal text-ink/35">
+            (their name)
+          </span>
+          <span className="px-2 text-ink/30" aria-hidden>
+            ·
+          </span>
+        </>
       )}
+      <span style={{ color: tone.color }}>{tone.label}</span>
     </p>
+  );
+}
+
+const DIFFICULTY_TONE: Record<QuestDifficulty, { label: string; color: string }> = {
+  cozy: { label: "cozy", color: "#4d6b2c" },
+  normal: { label: "normal", color: "#8a3a16" },
+  legendary: { label: "legendary", color: "#6b1f10" },
+  secret: { label: "secret mission", color: "#3d2150" },
+};
+
+/**
+ * The card's visual centerpiece, between the sub-line and the stats.
+ * Switches shape based on the note kind:
+ *
+ *   - filled image     → ImageCenterpiece (the photo IS the focal point)
+ *   - filled location  → LocationCenterpiece (a destination callout)
+ *   - anything else    → a thin gold rule, same as the old layout
+ *
+ * Empty image/location notes fall through to the rule so the card
+ * keeps reading cleanly while the sender is mid-edit; the placeholder
+ * nudge ("Add an image…", "Add a place…") still appears below the
+ * stats via `NoteLine`.
+ */
+function Centerpiece({ note }: { note: QuestNote }) {
+  if (note.kind === "image" && note.image) {
+    return <ImageCenterpiece note={note} />;
+  }
+  if (note.kind === "location" && note.place.trim().length > 0) {
+    return <LocationCenterpiece note={note} />;
+  }
+  return <div className="my-5 h-px w-full bg-ink/15" />;
+}
+
+/**
+ * Whether to repeat the note's content below the stats. We promote
+ * image + location into the centerpiece above the stats, so the
+ * footer repetition isn't needed for those when they're filled in.
+ * Empty states still show their placeholder text below, and text
+ * notes always show their quote below.
+ */
+function shouldShowFooterNote(note: QuestNote): boolean {
+  if (note.kind === "image") return !note.image;
+  if (note.kind === "location") return note.place.trim().length === 0;
+  return true;
+}
+
+/**
+ * The image as the focal point of the card. Sits between the sub-line
+ * and the stats. A pair of hairline rules above and below frame it
+ * like a printed photo on a poster; the caption (if any) sits beneath.
+ */
+function ImageCenterpiece({
+  note,
+}: {
+  note: Extract<QuestNote, { kind: "image" }>;
+}) {
+  return (
+    <figure className="m-0 my-5">
+      <div className="h-px w-full bg-ink/15" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={note.image}
+        alt={note.caption.trim() || "A picture from the sender"}
+        className="my-3 max-h-72 w-full rounded-lg object-contain ring-1 ring-ink/15"
+      />
+      {note.caption.trim().length > 0 ? (
+        <figcaption className="text-center font-serif italic leading-relaxed text-ink-soft">
+          {note.caption}
+        </figcaption>
+      ) : null}
+      <div className="h-px w-full bg-ink/15" />
+    </figure>
+  );
+}
+
+/**
+ * Location callout — a parchment-tinted block highlighting the place,
+ * its address, and a quick "open in Maps" deep link. Reads as "this is
+ * where you're going" rather than just a label.
+ */
+function LocationCenterpiece({
+  note,
+}: {
+  note: Extract<QuestNote, { kind: "location" }>;
+}) {
+  const mapsUrl = buildMapsUrl(note.place, note.address, note.lat, note.lng);
+  return (
+    <div className="my-5 flex items-start gap-3 rounded-lg border border-ink/15 bg-ink/[0.04] px-4 py-3 text-ink-soft">
+      <PinGlyph />
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
+          Destination
+        </p>
+        <p className="mt-0.5 truncate font-display text-base font-semibold text-ink">
+          {note.place}
+        </p>
+        {note.address.trim().length > 0 ? (
+          <p className="font-serif italic leading-snug text-ink-soft">
+            {note.address}
+          </p>
+        ) : null}
+        {mapsUrl ? (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-block font-display text-[10px] uppercase tracking-[0.2em] text-ember-deep underline-offset-2 hover:underline"
+          >
+            Open in Maps ↗
+          </a>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -227,46 +382,30 @@ function Stat({
   label,
   value,
   placeholder,
-  accent = false,
 }: {
   label: string;
   value: string;
   placeholder: string;
-  accent?: boolean;
 }) {
   const filled = value.trim().length > 0;
   return (
-    // Vertical stack: label sits above the value so long values can wrap
-    // onto multiple lines instead of being truncated mid-word. `break-words`
-    // lets a single very long word (e.g. an unbroken URL or username) wrap
-    // gracefully rather than overflow its column.
+    // Vertical stack: label above value, value wraps freely. All stats
+    // render in the same ink color — the old ember accent on Reward
+    // is gone, since difficulty already gets a color cue on the
+    // sub-line and a second source of color was reading as noise.
     <div className="flex min-w-0 flex-col gap-1">
-      <dt className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft">
+      <dt className="font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft">
         {label}
       </dt>
       <dd
         className={
           "break-words font-medium leading-snug " +
-          (filled
-            ? accent
-              ? "text-ember-deep"
-              : "text-ink"
-            : "italic text-ink/35")
+          (filled ? "text-ink" : "italic text-ink/35")
         }
         title={filled ? value : placeholder}
       >
         {filled ? value : placeholder}
       </dd>
-    </div>
-  );
-}
-
-function Divider() {
-  return (
-    <div className="my-3 flex items-center gap-2 text-ink-soft/60">
-      <span className="h-px flex-1 bg-ink-soft/30" />
-      <span aria-hidden>✦</span>
-      <span className="h-px flex-1 bg-ink-soft/30" />
     </div>
   );
 }

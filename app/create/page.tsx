@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { QuestForm } from "@/components/quest/QuestForm";
 import { QuestCard } from "@/components/quest/QuestCard";
 import { GenerateLinkPanel } from "@/components/quest/GenerateLinkPanel";
+import { PreviewAsRecipient } from "@/components/quest/PreviewAsRecipient";
+import { SenderHistory } from "@/components/quest/SenderHistory";
 import {
   bundleToQuestData,
   makeDefaultQuestBundle,
@@ -28,19 +31,58 @@ export default function CreatePage() {
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [hintVisible, setHintVisible] = useState(false);
 
-  // Post-hydration: pull the draft out of localStorage. Wrapped in
-  // queueMicrotask so the setState calls are async w.r.t. the effect
-  // body (keeps the rules-of-hooks linter happy) AND React batches the
-  // updates before the first paint, so there's no flicker.
+  // Read `?from=…&to=…` seed params from the URL. Set by the "Send one
+  // back" CTA on the /invite page — when an accepted recipient wants to
+  // reply with their own quest, we prefill the roles swapped.
+  const searchParams = useSearchParams();
+  const seedFrom = searchParams.get("from");
+  const seedTo = searchParams.get("to");
+
+  // Post-hydration: pull the draft out of localStorage, then merge in
+  // any URL-param seeds. Wrapped in queueMicrotask so the setState
+  // calls are async w.r.t. the effect body (keeps the rules-of-hooks
+  // linter happy) AND React batches the updates before the first
+  // paint, so there's no flicker.
+  //
+  // Precedence rules:
+  //  1. Start from default bundle.
+  //  2. If a draft is worth restoring, that wins for everything.
+  //  3. Then layer URL seeds ON TOP — but only for empty/default
+  //     fields, so we never clobber a restored draft's recipient or
+  //     sender just because the URL still has stale params.
   useEffect(() => {
     queueMicrotask(() => {
       const draft = loadDraft();
+      let next: QuestBundle | null = null;
       if (draft && isDraftWorthRestoring(draft.bundle)) {
-        setBundle(draft.bundle);
+        next = draft.bundle;
         setRestoredAt(draft.savedAt);
         setHintVisible(true);
       }
+      const base = next ?? makeDefaultQuestBundle();
+      const fromTrim = seedFrom?.trim() ?? "";
+      const toTrim = seedTo?.trim() ?? "";
+      const recipientIsBlank = base.recipientName.trim().length === 0;
+      // "A friend" is the default; treat that as still-empty for seed.
+      const senderIsBlank =
+        base.senderName.trim().length === 0 ||
+        base.senderName.trim() === "A friend";
+      const patched: QuestBundle = {
+        ...base,
+        recipientName:
+          toTrim.length > 0 && recipientIsBlank ? toTrim : base.recipientName,
+        senderName:
+          fromTrim.length > 0 && senderIsBlank ? fromTrim : base.senderName,
+      };
+      // Only call setBundle if anything actually changed — avoids a
+      // wasted render when the URL has no seeds and there's no draft.
+      if (next !== null || patched !== base) {
+        setBundle(patched);
+      }
     });
+    // We deliberately key this to mount only; URL changes shouldn't
+    // re-seed the form mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-dismiss the hint after a moment so it doesn't sit in the way.
@@ -141,8 +183,22 @@ export default function CreatePage() {
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ type: "spring", stiffness: 160, damping: 22 }}
-          className="order-2 lg:order-1"
+          className="order-2 lg:order-1 flex flex-col gap-4"
         >
+          {/* Recent-quests rail. Hidden when empty so first-time
+              senders aren't greeted with a "Your recent quests · 0"
+              header. */}
+          <SenderHistory
+            onEditCopy={(seed) => {
+              setBundle(seed);
+              // Dismiss the draft hint if it happened to be open —
+              // the user has explicitly chosen a different starting
+              // point, so the "we restored your draft" banner is
+              // no longer accurate.
+              setRestoredAt(null);
+              setHintVisible(false);
+            }}
+          />
           <QuestForm value={bundle} onChange={setBundle} />
         </motion.section>
 
@@ -194,6 +250,14 @@ export default function CreatePage() {
               />
             </motion.div>
             <GenerateLinkPanel bundle={bundle} saveTick={saveTick} />
+
+            {/* Full-fidelity preview — opens the actual /invite scene
+                with this draft, so the sender can sanity-check the 3D
+                tavern view (long titles, message wrapping in the
+                typewriter, image notes) before they share. */}
+            <div className="flex justify-center">
+              <PreviewAsRecipient bundle={bundle} />
+            </div>
           </div>
         </motion.section>
       </div>

@@ -1,0 +1,26 @@
+{
+  "name": "QuestBoard",
+  "short_name": "QuestBoard",
+  "description": "Turn invites into tiny RPG quests. Build a card, share the link, watch them accept the quest.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#1a0e05",
+  "background_color": "#0d0905",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["social", "entertainment", "lifestyle"]
+}

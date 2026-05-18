@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { QuestBundle } from "@/types/quest";
 import { encodeQuestBundle } from "@/lib/questCodec";
+import { recordSend } from "@/lib/senderHistory";
+import { shortenUrl } from "@/lib/shortenUrl";
 import { Button } from "@/components/ui/Button";
+import { QrCode } from "./QrCode";
 
 type Props = {
   bundle: QuestBundle;
@@ -35,15 +38,50 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   //    clipboard is still fresh — no useEffect needed, no derived-state trap.
   const [revealed, setRevealed] = useState(false);
   const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  // QR is opt-in — not everyone needs it, and it takes vertical space.
+  const [qrVisible, setQrVisible] = useState(false);
+
+  // Shortener state: pairs the produced short URL with the encoded
+  // bundle it was generated from. When the form changes (encoded
+  // updates), the short URL automatically becomes stale and the UI
+  // reverts to the long link.
+  const [shortFor, setShortFor] = useState<{ encoded: string; url: string } | null>(
+    null,
+  );
+  const [shortenStatus, setShortenStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  const [shortenError, setShortenError] = useState<string | null>(null);
 
   const encoded = useMemo(() => encodeQuestBundle(bundle), [bundle]);
   const link = useMemo(() => buildLink(encoded), [encoded]);
+  // Display the short link only if it was generated FROM the current
+  // encoded bundle — otherwise the short URL points at a stale draft.
+  const displayLink =
+    shortFor && shortFor.encoded === encoded ? shortFor.url : link;
   const isCopied = copiedFor === encoded;
+  const isShortened = shortFor !== null && shortFor.encoded === encoded;
+
+  /**
+   * Record this quest in the sender's local history. Called from both
+   * copy and open-as-recipient, since either action indicates the
+   * sender treats this draft as "real" and is about to share. recordSend
+   * de-dupes by encoded value, so repeated copies of the same link
+   * just promote the existing entry to the top.
+   */
+  function noteShared() {
+    recordSend({
+      encoded,
+      recipientName: bundle.recipientName,
+      optionCount: bundle.options.length,
+    });
+  }
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(displayLink);
       setCopiedFor(encoded);
+      noteShared();
       // Auto-clear the badge after a moment, but only if the user hasn't
       // copied again or edited the form in the meantime.
       window.setTimeout(() => {
@@ -57,7 +95,31 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   }
 
   function handleOpen() {
-    window.open(link, "_blank", "noopener,noreferrer");
+    noteShared();
+    window.open(displayLink, "_blank", "noopener,noreferrer");
+  }
+
+  /**
+   * Request a short version of the current link via the `/api/shorten`
+   * proxy. Loading state guards against double-clicks; errors render
+   * inline beside the panel rather than via a toast (less invasive,
+   * and the panel already owns a footprint for status text).
+   */
+  async function handleShorten() {
+    if (shortenStatus === "loading") return;
+    setShortenStatus("loading");
+    setShortenError(null);
+    const result = await shortenUrl(link);
+    if (result.ok) {
+      setShortFor({ encoded, url: result.shortUrl });
+      setShortenStatus("idle");
+      // Clear any prior "Copied" badge so the user doesn't think the
+      // clipboard already holds the new short URL.
+      setCopiedFor(null);
+    } else {
+      setShortenStatus("error");
+      setShortenError(result.error);
+    }
   }
 
   /**
@@ -92,9 +154,13 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   const hasImageNote = bundle.options.some(
     (o) => o.note.kind === "image" && o.note.image.length > 0,
   );
-  const tooLong = hasImageNote
-    ? encoded.length > 22_000
-    : encoded.length > 1600;
+  // The visual meter scales to a different "budget" depending on what's
+  // in the link. URLs over ~2000 chars start misbehaving on some
+  // platforms; image notes blow past that necessarily, so we measure
+  // against a larger budget where most chat apps still cope.
+  const lengthBudget = hasImageNote ? 26_000 : 2_000;
+  const lengthRatio = Math.min(1, encoded.length / lengthBudget);
+  const tooLong = lengthRatio > 0.8;
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-parchment/10 bg-ink/30 p-4 backdrop-blur">
@@ -168,28 +234,100 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
           <input
             id="quest-link-input"
             readOnly
-            value={link}
+            value={displayLink}
             onFocus={(e) => e.currentTarget.select()}
             aria-label="Shareable quest link"
             className="w-full rounded-lg border border-parchment/15 bg-ink/40 px-3 py-2 font-mono text-[11px] text-parchment/80 outline-none focus:border-gold/60 focus:ring-2 focus:ring-gold/30"
           />
+
+          {isShortened ? (
+            <p className="text-[11px] text-parchment/55">
+              <span className="text-gold/80">Shortened ✓</span> — points to
+              the full quest link.
+            </p>
+          ) : (
+            <LengthMeter
+              current={encoded.length}
+              budget={lengthBudget}
+              ratio={lengthRatio}
+              hasImageNote={hasImageNote}
+            />
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" size="md" onClick={handleOpen}>
               Open as recipient ↗
             </Button>
-            {tooLong ? (
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={() => setQrVisible((v) => !v)}
+              aria-expanded={qrVisible}
+            >
+              {qrVisible ? "Hide QR" : "Show QR"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={handleShorten}
+              disabled={shortenStatus === "loading" || isShortened}
+              aria-live="polite"
+            >
+              {isShortened
+                ? "Shortened ✓"
+                : shortenStatus === "loading"
+                  ? "Shortening…"
+                  : "Shorten ↗"}
+            </Button>
+            {tooLong && !isShortened ? (
               <span className="text-[11px] text-ember">
                 {hasImageNote
-                  ? "This link is long because the image travels inside it — it works on the web, but some chat apps may cut it off. A smaller/simpler image, or a text note, keeps it shorter."
-                  : "This one's a long link — some apps may shorten it. Try trimming the message or activity if it gets cut off."}
-              </span>
-            ) : hasImageNote ? (
-              <span className="text-[11px] text-parchment/45">
-                Heads up: an image note makes the link much longer than a
-                text one — fine for most apps, but worth a test send.
+                  ? "This link is long because the image travels inside it — try Shorten ↗, or switch to a text/location note."
+                  : "This one's a long link — Shorten ↗ should help."}
               </span>
             ) : null}
           </div>
+
+          {/* Shortener error — surfaced inline rather than via a toast
+              so it never disappears before the user has read it. */}
+          <AnimatePresence>
+            {shortenStatus === "error" && shortenError ? (
+              <motion.p
+                key="shorten-error"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                role="alert"
+                className="overflow-hidden text-[11px] text-ember"
+              >
+                {shortenError}
+              </motion.p>
+            ) : null}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {qrVisible ? (
+              <motion.div
+                key="qr"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.25 }}
+                className="overflow-hidden"
+              >
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  {/* QR is built from whatever link the user is sharing.
+                      If they've shortened, the QR encodes the short
+                      URL — much denser, much easier to scan. */}
+                  <QrCode value={displayLink} />
+                  <p className="text-center text-[11px] text-parchment/55">
+                    Scan with a phone to open the quest.
+                  </p>
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </>
       ) : null}
     </div>
@@ -202,4 +340,76 @@ function buildLink(encoded: string): string {
   const origin =
     typeof window !== "undefined" ? window.location.origin : "https://questboard.app";
   return `${origin}/invite?q=${encoded}`;
+}
+
+/**
+ * Visual fill meter for the encoded URL length. Three zones:
+ *   green   < 60% of budget  — plenty of room
+ *   gold   60–80%            — getting long but fine
+ *   ember  > 80%             — likely to be truncated by some apps
+ *
+ * The budget differs for image-note quests (image data is heavy by
+ * nature), which is why the parent passes the budget in explicitly.
+ * Width animates smoothly so adding/removing options shows a visible
+ * change rather than snapping.
+ */
+function LengthMeter({
+  current,
+  budget,
+  ratio,
+  hasImageNote,
+}: {
+  current: number;
+  budget: number;
+  ratio: number;
+  hasImageNote: boolean;
+}) {
+  const tone =
+    ratio > 0.8 ? "ember" : ratio > 0.6 ? "gold" : "green";
+  const barColor =
+    tone === "ember"
+      ? "bg-ember"
+      : tone === "gold"
+        ? "bg-gold"
+        : "bg-[#6f8c4a]";
+  const labelColor =
+    tone === "ember"
+      ? "text-ember"
+      : tone === "gold"
+        ? "text-gold/85"
+        : "text-parchment/55";
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-[10px] tabular-nums">
+        <span className="font-display uppercase tracking-[0.2em] text-parchment/45">
+          Link size
+        </span>
+        <span className={labelColor}>
+          {formatBytes(current)} / {formatBytes(budget)}
+          {hasImageNote ? " · image" : ""}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={budget}
+        aria-valuenow={current}
+        aria-label="Link length budget"
+        className="h-1.5 w-full overflow-hidden rounded-full bg-ink/60"
+      >
+        <motion.div
+          className={`h-full ${barColor}`}
+          initial={false}
+          animate={{ width: `${Math.max(2, ratio * 100)}%` }}
+          transition={{ type: "spring", stiffness: 220, damping: 28 }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n}`;
+  return `${(n / 1024).toFixed(1)}k`;
 }

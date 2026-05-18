@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { QuestCardOverlay } from "./QuestCardOverlay";
-import { TavernScene } from "@/components/scene/TavernScene";
+import { KeyboardScrollNav } from "./KeyboardScrollNav";
+import { TavernScene, type ScrollScreenAnchor } from "@/components/scene/TavernScene";
 import { AmbientStarter } from "@/components/scene/AmbientStarter";
 import { MuteToggle } from "@/components/scene/MuteToggle";
 import { useSfx } from "@/components/scene/useSfx";
@@ -13,6 +14,7 @@ import { decodeQuestBundle } from "@/lib/questCodec";
 import { bundleToQuestData } from "@/lib/questDefaults";
 import { getBundleId } from "@/lib/localResponse";
 import { usePersistedBundleResponse } from "@/lib/usePersistedBundleResponse";
+import { useKonamiCode } from "@/lib/useKonamiCode";
 import type { BundleResponse, QuestBundle } from "@/types/quest";
 
 export default function InviteScene() {
@@ -31,7 +33,7 @@ export default function InviteScene() {
   return <InviteScreen bundle={bundle} />;
 }
 
-function InviteScreen({ bundle }: { bundle: QuestBundle }) {
+export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
   const bundleId = getBundleId(bundle);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isCardOpen, setIsCardOpen] = useState(false);
@@ -68,19 +70,50 @@ function InviteScreen({ bundle }: { bundle: QuestBundle }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [hasMultiple, isCardOpen, total]);
 
+  // First-time hint: a pulsing ring around the first scroll and a brief
+  // banner explaining what to do. Decays on first hover/click (handled
+  // in openAt + setHovered below) or after 6 seconds, whichever comes
+  // first. The user only needs to be told once.
+  const [firstHintVisible, setFirstHintVisible] = useState(true);
+  useEffect(() => {
+    if (!firstHintVisible) return;
+    const t = window.setTimeout(() => setFirstHintVisible(false), 6000);
+    return () => window.clearTimeout(t);
+  }, [firstHintVisible]);
+
+  // Shared mutable array: `<ScreenProjector>` inside the Canvas writes
+  // each scroll's screen-space pixel position here every frame;
+  // `<KeyboardScrollNav>` mirrors those values onto its invisible
+  // focusable buttons via a rAF loop. No React state involved, so this
+  // tracks the camera without re-rendering anything.
+  const screenAnchorsRef = useRef<ScrollScreenAnchor[]>([]);
+
+  // Konami easter egg — ↑↑↓↓←→←→BA flips the scrolls into rainbow mode
+  // for 10 seconds. Strictly cosmetic; nothing about the quest changes.
+  const [rainbowMode, setRainbowMode] = useState(false);
+  const rainbowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useKonamiCode(() => {
+    setRainbowMode(true);
+    if (rainbowTimer.current) clearTimeout(rainbowTimer.current);
+    rainbowTimer.current = setTimeout(() => setRainbowMode(false), 10_000);
+  });
+  // Cleanup on unmount.
+  useEffect(() => {
+    return () => {
+      if (rainbowTimer.current) clearTimeout(rainbowTimer.current);
+    };
+  }, []);
+
   function openAt(index: number) {
     setActiveIndex(index);
     setIsCardOpen(true);
+    setFirstHintVisible(false);
     playScrollOpen();
   }
 
   function accept(optionIndex: number) {
     setResponse({ kind: "accepted", optionIndex });
     playQuestAccepted();
-  }
-
-  function deferAll() {
-    setResponse({ kind: "maybe_later" });
   }
 
   function reset() {
@@ -97,7 +130,27 @@ function InviteScreen({ bundle }: { bundle: QuestBundle }) {
         quests={allQuests}
         onSelectQuest={openAt}
         controlsEnabled={!isCardOpen}
+        rainbow={rainbowMode}
+        // Only highlight the very first scroll, and only while the
+        // first-time hint is live. Any hover or open clears it.
+        firstHintIndex={firstHintVisible ? 0 : null}
+        onAnyHover={() => setFirstHintVisible(false)}
+        screenAnchorsRef={screenAnchorsRef}
       />
+
+      {/* DOM-layer keyboard on-ramp. Tab cycles invisible buttons
+          pinned to each scroll via the shared screen-anchor ref;
+          Enter / Space opens the card. Hidden while a card is already
+          open so Tab doesn't steal focus from the overlay's buttons. */}
+      {!isCardOpen ? (
+        <KeyboardScrollNav
+          count={total}
+          quests={allQuests}
+          onSelectQuest={openAt}
+          onAnyFocus={() => setFirstHintVisible(false)}
+          screenAnchorsRef={screenAnchorsRef}
+        />
+      ) : null}
 
       {/* Audio — silent no-ops when files are absent. */}
       <AmbientStarter url="/audio/ambient_tavern.mp3" />
@@ -132,7 +185,6 @@ function InviteScreen({ bundle }: { bundle: QuestBundle }) {
             response={response}
             onClose={() => setIsCardOpen(false)}
             onAccept={() => accept(activeIndex)}
-            onDefer={deferAll}
             onResetResponse={reset}
             onPrev={
               hasMultiple
