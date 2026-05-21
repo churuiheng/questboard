@@ -268,11 +268,7 @@ export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
 
       <AnimatePresence>
         {!isCardOpen ? (
-          <BoardHint
-            bundle={bundle}
-            response={response}
-            onOpenFirst={() => openAt(0)}
-          />
+          <BoardHint bundle={bundle} response={response} />
         ) : null}
       </AnimatePresence>
 
@@ -310,11 +306,9 @@ export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
 function BoardHint({
   bundle,
   response,
-  onOpenFirst,
 }: {
   bundle: QuestBundle;
   response: BundleResponse | null;
-  onOpenFirst: () => void;
 }) {
   const total = bundle.options.length;
   return (
@@ -325,18 +319,14 @@ function BoardHint({
       transition={{ duration: 0.35 }}
       className="pointer-events-none absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2"
     >
+      {/* Recipient label only — the explicit "tap to open" CTA was
+          removed per design feedback. The scrolls themselves are the
+          affordance: their hover-pulse + first-hint ring already
+          communicate tappability without an ember button competing
+          for the eye. */}
       <span className="font-display text-[10px] uppercase tracking-[0.32em] text-parchment/60">
         For {bundle.recipientName.trim() || "you"}
       </span>
-      <button
-        type="button"
-        onClick={onOpenFirst}
-        className="pointer-events-auto ember-pulse inline-flex items-center gap-2 rounded-full bg-ember/90 px-5 py-2 font-display text-xs uppercase tracking-[0.2em] text-parchment shadow-[0_6px_20px_-4px_rgba(217,107,52,0.6)] hover:bg-ember"
-      >
-        {total > 1
-          ? "Tap a scroll to see the quest"
-          : "Tap the parchment to see your quest"}
-      </button>
       {total > 1 ? (
         <span className="text-[11px] text-parchment/55">
           {total} quests to pick from

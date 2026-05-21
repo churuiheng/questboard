@@ -321,11 +321,30 @@ export function QuestCardOverlay({
                 ) : null}
 
                 {/* The accepted state used to render inside this footer
-                    (and inside the card). It now lives OUTSIDE the
-                    card so the parchment can keep a steady height
-                    while the wax seal stamps onto it. See
-                    `<AcceptedPanel/>` rendered after the QuestCard
-                    below. */}
+                    (and inside the card). The big "Quest Accepted"
+                    panel now lives on the BACK face of the flipped
+                    card (QuestLobbyCard). When the recipient flips
+                    back to the front while still accepted, we just
+                    surface a quiet "Flip card" link so they know how
+                    to return to the lobby — no other footer buttons
+                    are needed since accept already happened. */}
+                {footerState === "thisAccepted" ? (
+                  <motion.div
+                    key="thisAccepted"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
+                    className="flex flex-col items-end gap-2"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setFlipPhase("flipped")}
+                      className="font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/55 underline-offset-2 hover:text-ink-soft hover:underline"
+                    >
+                      Flip card ↻
+                    </button>
+                  </motion.div>
+                ) : null}
 
                 {footerState === "otherAccepted" ? (
                   <motion.div
@@ -399,7 +418,9 @@ export function QuestCardOverlay({
               <QuestLobbyCard
                 quest={quest}
                 cheer={cheer}
+                canChangeMind={total > 1}
                 onResetResponse={handleResetWithFlip}
+                onFlipBack={() => setFlipPhase("front")}
               />
             </div>
           </motion.div>

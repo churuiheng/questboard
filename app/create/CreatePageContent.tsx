@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { QuestForm } from "@/components/quest/QuestForm";
-import { QuestCard } from "@/components/quest/QuestCard";
+import { FlippablePreviewCard } from "@/components/quest/FlippablePreviewCard";
 import { GenerateLinkPanel } from "@/components/quest/GenerateLinkPanel";
 import { PreviewAsRecipient } from "@/components/quest/PreviewAsRecipient";
 import { SenderHistory } from "@/components/quest/SenderHistory";
@@ -205,7 +205,7 @@ export default function CreatePageContent() {
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ type: "spring", stiffness: 160, damping: 22 }}
-          className="order-2 lg:order-1 flex flex-col gap-4"
+          className="order-1 flex flex-col gap-4"
         >
           {/* Recent-quests rail. Hidden when empty so first-time
               senders aren't greeted with a "Your recent quests · 0"
@@ -228,7 +228,7 @@ export default function CreatePageContent() {
           initial={{ opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ type: "spring", stiffness: 160, damping: 22, delay: 0.05 }}
-          className="order-1 lg:order-2"
+          className="order-2"
           id="quest-preview"
         >
           <div className="lg:sticky lg:top-8 flex flex-col gap-5">
@@ -254,21 +254,21 @@ export default function CreatePageContent() {
               </div>
             ) : null}
 
-            {/* The preview uses `variant="scene"` so the sender sees the
-                same parchment card that opens for the recipient on the
-                /invite page. We add the same "message from a friend"
-                banner the overlay does (minus the accept/decline
-                buttons) so what they see is exactly what they ship. */}
+            {/* The preview uses the same parchment card that opens
+                for the recipient on /invite. Wrapped in
+                FlippablePreviewCard so the sender can tap it to
+                preview the post-accept lobby view too — what was
+                previously a small static "ending" chip in the form
+                is now the real, full-fidelity back of the card. */}
             <motion.div
               key={pulseKey}
               initial={{ scale: 0.985 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 220, damping: 20 }}
             >
-              <QuestCard
-                data={previewQuest}
-                variant="scene"
-                footer={<MessageBanner quest={previewQuest} />}
+              <FlippablePreviewCard
+                quest={previewQuest}
+                frontFooter={<MessageBanner quest={previewQuest} />}
               />
             </motion.div>
             <GenerateLinkPanel bundle={bundle} saveTick={saveTick} />

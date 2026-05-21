@@ -1,9 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { CalendarExportButton } from "./CalendarExportButton";
 import { ShareReplyButton } from "./ShareReplyButton";
-import { SendOneBackButton } from "./SendOneBackButton";
 import { QuestCountdown } from "./QuestCountdown";
 import { ExpandableImage } from "./ExpandableImage";
 import { SEAL_DESIGN } from "@/lib/sealDesign";
@@ -14,7 +12,22 @@ type Props = {
   quest: QuestData;
   /** Pre-picked cheer string from the parent (deterministic per quest). */
   cheer: string;
+  /**
+   * When true (multi-quest bundles), the footer offers "Change my mind"
+   * which clears the response and lets the recipient pick a different
+   * scroll. When false (single-quest bundles), changing your mind makes
+   * no sense — there's nothing else to pick — so we offer "Flip card"
+   * instead, a purely visual toggle back to the front face that
+   * preserves the accepted state.
+   */
+  canChangeMind: boolean;
+  /** Clears the response. Only invoked when `canChangeMind` is true. */
   onResetResponse: () => void;
+  /**
+   * Flips the card back to the front face without clearing the
+   * acceptance. Used for the single-quest "Flip card" affordance.
+   */
+  onFlipBack: () => void;
 };
 
 /**
@@ -44,7 +57,9 @@ type Props = {
 export function QuestLobbyCard({
   quest,
   cheer,
+  canChangeMind,
   onResetResponse,
+  onFlipBack,
 }: Props) {
   const design = SEAL_DESIGN[quest.difficulty];
   const line = quest.ending.message.trim() || cheer;
@@ -106,20 +121,47 @@ export function QuestLobbyCard({
 
           <div className="mt-5 h-px w-full bg-ink/15" />
 
-          {/* Action row + change-my-mind footer */}
+          {/* Action row — kept lean: just Share. Calendar export and
+              "Send one back" were removed per design feedback to keep
+              the post-accept moment focused on the choice the user
+              just made. */}
           <div className="mt-4 flex flex-col items-center gap-3">
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <CalendarExportButton quest={quest} />
               <ShareReplyButton quest={quest} />
-              <SendOneBackButton quest={quest} />
             </div>
-            <button
-              type="button"
-              onClick={onResetResponse}
-              className="font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/55 underline-offset-2 hover:text-ink-soft hover:underline"
-            >
-              Change my mind
-            </button>
+            {/* Footer:
+                - "Flip card" is always available — purely visual,
+                  toggles back to the front face while keeping the
+                  accepted state. Lets the recipient peek at the
+                  original quest details again without committing.
+                - "Change my mind" is gated to multi-quest bundles
+                  (canChangeMind) — it actually clears the response so
+                  the recipient can pick a different scroll. On a
+                  single-quest bundle there's nothing else to pick, so
+                  the option is hidden. */}
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <button
+                type="button"
+                onClick={onFlipBack}
+                className="font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/55 underline-offset-2 hover:text-ink-soft hover:underline"
+              >
+                Flip card
+              </button>
+              {canChangeMind ? (
+                <>
+                  <span aria-hidden className="text-ink-soft/30 text-[10px]">
+                    ·
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onResetResponse}
+                    className="font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/55 underline-offset-2 hover:text-ink-soft hover:underline"
+                  >
+                    Change my mind
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

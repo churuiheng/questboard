@@ -27,6 +27,7 @@ import {
 import { Field, TextArea, TextInput } from "@/components/ui/Field";
 import { CalendarDropdown } from "@/components/quest/CalendarDropdown";
 import { VibeDropdown } from "@/components/quest/VibeDropdown";
+import { RecipientDropdown } from "@/components/quest/RecipientDropdown";
 import { PlaceAutocomplete } from "@/components/quest/PlaceAutocomplete";
 
 // Leaflet touches `window` and ships its own CSS — load it only when the
@@ -100,41 +101,18 @@ export function QuestForm({ value, onChange }: Props) {
       className="flex flex-col gap-3"
       onSubmit={(e) => e.preventDefault()}
     >
-      {/* WHO — the one required text input */}
+      {/* WHO — styled dropdown matching VibeDropdown's popover, with
+          a "Custom name…" escape hatch that reveals a text input. */}
       <SectionCard
         label="Who is this quest for?"
         hint={
           value.recipientName.trim().length === 0 ? "Needed" : undefined
         }
       >
-        <TextInput
-          id="quest-recipient-input"
+        <RecipientDropdown
           value={value.recipientName}
-          maxLength={fieldLimits.recipientName}
-          placeholder="Their name…"
-          onChange={(e) => patchBundle({ recipientName: e.target.value })}
-          className="text-lg"
-          // No autoFocus — on mobile this pops the keyboard the
-          // instant the page loads, which fights the entrance
-          // animations and obscures the rest of the form before the
-          // sender has seen what they're filling in. On desktop the
-          // keyboard cost is zero but the focus jump is still
-          // disorienting; leaving it manual makes the form feel
-          // calmer at first paint.
-          required
-          aria-required="true"
-          aria-label="Recipient's name"
-          autoComplete="off"
-          autoCapitalize="words"
-          autoCorrect="off"
-          spellCheck={false}
-          enterKeyHint="next"
+          onChange={(name) => patchBundle({ recipientName: name })}
         />
-        {value.recipientName.trim().length === 0 ? (
-          <p className="mt-1.5 text-[11px] text-parchment/45">
-            Their name shows up on every scroll.
-          </p>
-        ) : null}
       </SectionCard>
 
       {/* QUEST OPTIONS — each is a self-contained mini-editor. Short
@@ -411,11 +389,11 @@ function NoteEditor({
  * Bundle-level editor for the post-accept reveal: the celebration
  * line, an optional image, and an optional meeting place.
  *
- * Layout: a generous vertical stack with `gap-5` between zones and
- * the EndingPreview pinned to the right at sm+. Each zone has its own
- * eyebrow label and reads as a distinct beat. No nested cards — the
- * outer SectionCard already provides one frame; adding more was the
- * source of the old "cluttered" feel.
+ * Layout: a generous vertical stack with `gap-5` between zones. Each
+ * zone has its own eyebrow label and reads as a distinct beat. The
+ * old static "EndingPreview" mini-card to the right was removed once
+ * the live preview card became flippable — the sender taps the
+ * preview to see the real lobby surface instead.
  *
  *   ── Message ────────  textarea + ↻ randomize
  *   ── Celebration ────  collapsible image picker
@@ -428,18 +406,20 @@ function EndingEditor({
   value: QuestEnding;
   onChange: (next: QuestEnding) => void;
 }) {
+  // The little static "Quest Accepted" mini-card that used to live to
+  // the right of these fields was removed once the live preview card
+  // became flippable — the sender can now tap the preview to see the
+  // real, full-fidelity lobby card with their actual message + image
+  // + location applied. One source of truth, no risk of the chip
+  // drifting from the real surface.
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:gap-6">
-      <div className="flex flex-1 flex-col gap-5">
-        <EndingMessageField value={value} onChange={onChange} />
-        <EndingImageField value={value} onChange={onChange} />
-        <EndingLocationEditor
-          value={value.location ?? { place: "", address: "" }}
-          onChange={(next) => onChange({ ...value, location: next })}
-        />
-      </div>
-
-      <EndingPreview value={value} />
+    <div className="flex flex-col gap-5">
+      <EndingMessageField value={value} onChange={onChange} />
+      <EndingImageField value={value} onChange={onChange} />
+      <EndingLocationEditor
+        value={value.location ?? { place: "", address: "" }}
+        onChange={(next) => onChange({ ...value, location: next })}
+      />
     </div>
   );
 }
@@ -645,38 +625,6 @@ function EndingLocationEditor({
           ? "Pinned ✓ — the recipient gets an exact \"Open in Maps\" link after they accept."
           : "Pick from the dropdown for the most accurate pin. Revealed after Accept."}
       </p>
-    </div>
-  );
-}
-
-/** Static "this is what they'll see" mini-card for the ending. */
-function EndingPreview({ value }: { value: QuestEnding }) {
-  return (
-    <div className="w-full shrink-0 self-start rounded-lg bg-parchment p-3 text-ink shadow-inner ring-1 ring-ink/10 sm:w-48">
-      <div className="mx-auto flex h-10 w-10 -rotate-6 items-center justify-center rounded-full bg-[radial-gradient(circle_at_35%_30%,#e8854b,#c0521f_70%)] text-parchment ring-1 ring-ember-deep/60">
-        <span aria-hidden className="text-lg leading-none">
-          ⚔
-        </span>
-      </div>
-      <div className="mt-1.5 text-center font-display text-[9px] uppercase tracking-[0.22em] text-ember-deep">
-        Quest Accepted
-      </div>
-      <p
-        className={
-          "mt-0.5 text-center font-serif text-[11px] italic " +
-          (value.message.trim() ? "text-ink-soft" : "text-ink/40")
-        }
-      >
-        {value.message.trim() || "A surprise cheer ✨"}
-      </p>
-      {value.image ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={value.image}
-          alt=""
-          className="mt-1.5 max-h-24 w-full rounded object-contain ring-1 ring-ink/15"
-        />
-      ) : null}
     </div>
   );
 }

@@ -27,21 +27,43 @@ export function QuestCountdown({ dateTimeText }: Props) {
   // countdown" path is when the parsed date is in the past.
   const eventAt = useMemo(() => parseWhen(dateTimeText), [dateTimeText]);
 
-  const [now, setNow] = useState(() => Date.now());
+  // `now` starts null so the SSR snapshot and the first client render
+  // produce identical HTML (both render `null` from the early-return
+  // below). If we initialized with `Date.now()` directly, the server
+  // and client would resolve "now" at different moments — sometimes a
+  // minute apart — and React would error: "server text didn't match
+  // client" on the countdown digits + aria-label. The first useEffect
+  // bumps `now` to the real time, then the interval takes over.
+  const [now, setNow] = useState<number | null>(null);
 
   // Tick interval: 1s when close, 60s when distant. We re-derive it
   // each render so the moment the event passes the "within an hour"
-  // threshold, the next interval automatically becomes 1s.
+  // threshold, the next interval automatically becomes 1s. While
+  // `now` is null (pre-mount) we don't tick at all.
   const tickMs = useMemo(() => {
+    if (now === null) return 60_000; // unused — guarded below
     const diff = eventAt.getTime() - now;
     return diff < 60 * 60 * 1000 ? 1000 : 60_000;
   }, [eventAt, now]);
 
   useEffect(() => {
+    // Mount: snap `now` to real time. This triggers a re-render that
+    // exposes the countdown body, but the SSR HTML it replaces was
+    // identical (null) so React doesn't flag a mismatch.
+    //
+    // queueMicrotask wrapper keeps the lint rule happy ("no sync
+    // setState in effect body") — same pattern used by the saveTick
+    // and auto-shorten effects elsewhere in the codebase.
+    queueMicrotask(() => setNow(Date.now()));
+  }, []);
+
+  useEffect(() => {
+    if (now === null) return;
     const id = window.setInterval(() => setNow(Date.now()), tickMs);
     return () => window.clearInterval(id);
-  }, [tickMs]);
+  }, [tickMs, now]);
 
+  if (now === null) return null;
   const diffMs = eventAt.getTime() - now;
   if (diffMs <= 0) return null;
 
