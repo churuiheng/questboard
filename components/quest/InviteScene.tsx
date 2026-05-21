@@ -19,18 +19,114 @@ import type { BundleResponse, QuestBundle } from "@/types/quest";
 
 export default function InviteScene() {
   const searchParams = useSearchParams();
-  const encoded = searchParams.get("q");
+  const inlineEncoded = searchParams.get("q");
+  const stashId = searchParams.get("s");
+
+  // Two ways into a quest:
+  //   - `?q=<encoded>` — the bundle is right in the URL, decode sync
+  //   - `?s=<id>`      — the bundle is stashed on the server, fetch async
+  //
+  // We prefer the inline form when both are present (no round-trip).
+  // The stash flow exists for image-note bundles too big for the
+  // free URL shorteners — Shorten ↗ in /create routes those through
+  // /api/shorten which calls /api/stash and returns this short form.
+  const initialResolved: ResolvedState = inlineEncoded
+    ? { kind: "ready", encoded: inlineEncoded }
+    : stashId
+      ? { kind: "loading" }
+      : { kind: "ready", encoded: null };
+  const [resolved, setResolved] = useState<ResolvedState>(initialResolved);
+
+  useEffect(() => {
+    // Only fetch when we're in stash mode with no inline data.
+    if (inlineEncoded || !stashId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/stash/${encodeURIComponent(stashId)}`,
+          { cache: "force-cache" },
+        );
+        const data = (await res.json().catch(() => ({}))) as {
+          encoded?: string;
+          error?: string;
+        };
+        if (cancelled) return;
+        if (res.ok && typeof data.encoded === "string") {
+          setResolved({ kind: "ready", encoded: data.encoded });
+        } else {
+          setResolved({
+            kind: "error",
+            message: data.error || "Couldn't open that quest link.",
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setResolved({ kind: "error", message: "Network error opening quest." });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [stashId, inlineEncoded]);
 
   const bundle: QuestBundle | null = useMemo(() => {
-    if (!encoded) return null;
-    return decodeQuestBundle(encoded);
-  }, [encoded]);
+    if (resolved.kind !== "ready" || !resolved.encoded) return null;
+    return decodeQuestBundle(resolved.encoded);
+  }, [resolved]);
 
+  if (resolved.kind === "loading") {
+    return <UnrollingScroll />;
+  }
+  if (resolved.kind === "error") {
+    return <MissingQuest hasParam errorMessage={resolved.message} />;
+  }
   if (!bundle) {
-    return <MissingQuest hasParam={Boolean(encoded)} />;
+    return <MissingQuest hasParam={Boolean(inlineEncoded || stashId)} />;
   }
 
   return <InviteScreen bundle={bundle} />;
+}
+
+/**
+ * Tristate for the `?s=` resolve flow:
+ *   - "ready"   — we have an encoded string (or know there isn't one)
+ *   - "loading" — fetching from /api/stash
+ *   - "error"   — fetch failed or returned a malformed payload
+ */
+type ResolvedState =
+  | { kind: "ready"; encoded: string | null }
+  | { kind: "loading" }
+  | { kind: "error"; message: string };
+
+/**
+ * "Unrolling the scroll…" placeholder shown while the stash fetch is
+ * in flight. Matches the parchment/ink palette so the page doesn't
+ * flash a blank dark screen before the scene mounts.
+ */
+function UnrollingScroll() {
+  return (
+    <main className="relative flex min-h-[100svh] w-full items-center justify-center px-6 text-center">
+      <div className="flex flex-col items-center gap-3">
+        <span className="font-display text-[10px] uppercase tracking-[0.36em] text-gold/70">
+          Unrolling the scroll
+        </span>
+        <span
+          aria-hidden
+          className="block h-1 w-32 overflow-hidden rounded-full bg-ink/40"
+        >
+          <motion.span
+            animate={{ x: ["-100%", "100%"] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+            className="block h-full w-1/3 bg-gold/70"
+          />
+        </span>
+      </div>
+    </main>
+  );
 }
 
 export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
@@ -251,7 +347,18 @@ function BoardHint({
   );
 }
 
-function MissingQuest({ hasParam }: { hasParam: boolean }) {
+function MissingQuest({
+  hasParam,
+  errorMessage,
+}: {
+  hasParam: boolean;
+  /**
+   * Optional override for the body copy — used when the stash flow
+   * surfaces a specific reason (404, network, malformed payload).
+   * Falls back to the generic "smudged scroll" / "nothing here" copy.
+   */
+  errorMessage?: string;
+}) {
   return (
     <main className="mx-auto flex min-h-[80svh] w-full max-w-md flex-1 flex-col items-center justify-center gap-6 px-6 text-center">
       <div className="font-display text-6xl text-gold/80" aria-hidden>
@@ -261,9 +368,11 @@ function MissingQuest({ hasParam }: { hasParam: boolean }) {
         {hasParam ? "Hmm — this scroll's a bit smudged" : "Nothing here yet"}
       </h1>
       <p className="text-sm leading-relaxed text-parchment/65">
-        {hasParam
-          ? "The invite link looks like it got snipped along the way. Ask whoever sent it to share a fresh one — links sometimes lose their tail when they're forwarded."
-          : "There's no quest at this link — but you can forge your own in about two minutes."}
+        {errorMessage
+          ? errorMessage
+          : hasParam
+            ? "The invite link looks like it got snipped along the way. Ask whoever sent it to share a fresh one — links sometimes lose their tail when they're forwarded."
+            : "There's no quest at this link — but you can forge your own in about two minutes."}
       </p>
       <Link
         href="/create"

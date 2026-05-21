@@ -130,10 +130,23 @@ function isQuestBundle(value: unknown): value is QuestBundle {
   return true;
 }
 
-function isQuestEnding(value: unknown): value is { message: string; image: string } {
+function isQuestEnding(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
-  return typeof v.message === "string" && typeof v.image === "string";
+  if (typeof v.message !== "string" || typeof v.image !== "string") {
+    return false;
+  }
+  // Location is optional. Reject only when present-and-malformed.
+  if (v.location !== undefined) {
+    const loc = v.location as Record<string, unknown> | null;
+    if (!loc || typeof loc !== "object") return false;
+    if (typeof loc.place !== "string" || typeof loc.address !== "string") {
+      return false;
+    }
+    if (loc.lat !== undefined && typeof loc.lat !== "number") return false;
+    if (loc.lng !== undefined && typeof loc.lng !== "number") return false;
+  }
+  return true;
 }
 
 function isDifficulty(v: unknown): boolean {

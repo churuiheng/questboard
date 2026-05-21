@@ -1,31 +1,32 @@
 import { NextResponse } from "next/server";
 
 /**
- * `/api/shorten` — server-side proxy for URL shortening.
+ * `/api/shorten` — server-side shortener.
  *
- * Why a proxy? The popular free shorteners (TinyURL, CleanURI) don't
- * set CORS headers, so calling them from the browser fails. Routing
- * through this endpoint sidesteps CORS entirely and gives us one place
- * to add fallbacks, validation, and rate-limiting later if needed.
+ * We deliberately use a single strategy: stash the encoded bundle on
+ * JSONblob (a free anonymous JSON storage service) and return a tiny
+ * `${origin}/invite?s=<id>` URL. The recipient page resolves the ID
+ * via `/api/stash/<id>` and decodes the bundle.
  *
- * Two providers, tried in order:
- *   1. TinyURL — simple GET, fast, returns the short URL as plain text.
- *      Reliable for URLs up to ~5–10 KB; rejects very long ones.
- *   2. CleanURI — POST with a form body, returns JSON. Documented to
- *      handle longer URLs, useful as a fallback when TinyURL refuses.
+ * Why not also try public URL shorteners (TinyURL/CleanURI)? They
+ * have become unreliable or deprecated for our use case — TinyURL
+ * intermittently refuses, and CleanURI rate-limits aggressively. The
+ * stash path produces equally short URLs (the host + ~10 chars) for
+ * every quest, including image-note quests too big for any free
+ * shortener to carry. One strategy, consistent behavior, no fallback
+ * cliff.
  *
  * Runs on the Edge runtime so it's cheap and globally distributed.
  *
- * Limits: refuses URLs over 30 KB outright — no free shortener will
- * carry an image-note bundle of that scale, and we'd rather fail fast
- * with a friendly message than 502 after a slow fetch.
+ * Limits: bundle payload over 200 KB is rejected outright — that's a
+ * massive image and we don't want to abuse JSONblob's free tier.
  */
 export const runtime = "edge";
 
 type ShortenSuccess = { shortUrl: string };
 type ShortenFailure = { error: string };
 
-const MAX_URL_LENGTH = 30_000;
+const STASH_MAX_PAYLOAD = 200_000;
 
 export async function POST(req: Request): Promise<NextResponse> {
   let url: string | undefined;
@@ -36,68 +37,76 @@ export async function POST(req: Request): Promise<NextResponse> {
     return jsonError("That request couldn't be parsed.", 400);
   }
 
-  if (!url) {
-    return jsonError("Missing url.", 400);
-  }
+  if (!url) return jsonError("Missing url.", 400);
   if (!/^https?:\/\//.test(url)) {
     return jsonError("Only http(s) URLs can be shortened.", 400);
   }
-  if (url.length > MAX_URL_LENGTH) {
+
+  // Extract the `?q=` payload — that's the chunk of data we persist.
+  let encoded: string | null = null;
+  let origin = "";
+  try {
+    const parsed = new URL(url);
+    encoded = parsed.searchParams.get("q");
+    origin = parsed.origin;
+  } catch {
+    return jsonError("Malformed URL.", 400);
+  }
+
+  if (!encoded) {
     return jsonError(
-      "This link is too long for the free shorteners. Try removing the image note, or switch it to a text note.",
+      "This URL has no ?q= payload to shorten.",
+      400,
+    );
+  }
+  if (encoded.length > STASH_MAX_PAYLOAD) {
+    return jsonError(
+      "This quest is too large to share. Try removing the image note.",
       413,
     );
   }
 
-  // Try TinyURL first — it's fastest when it works.
-  const tiny = await tryTinyUrl(url);
-  if (tiny) {
-    return NextResponse.json<ShortenSuccess>({ shortUrl: tiny });
+  const stashId = await stashOnJsonBlob(encoded);
+  if (!stashId) {
+    return jsonError(
+      "Couldn't reach the storage service just now. Try again in a moment.",
+      502,
+    );
   }
 
-  // Fall back to CleanURI — slower but tolerates longer URLs.
-  const clean = await tryCleanUri(url);
-  if (clean) {
-    return NextResponse.json<ShortenSuccess>({ shortUrl: clean });
-  }
-
-  return jsonError(
-    "Couldn't reach the URL shorteners just now. Try again in a moment.",
-    502,
-  );
+  const shortUrl = `${origin}/invite?s=${stashId}`;
+  return NextResponse.json<ShortenSuccess>({ shortUrl });
 }
 
 function jsonError(message: string, status: number): NextResponse {
   return NextResponse.json<ShortenFailure>({ error: message }, { status });
 }
 
-async function tryTinyUrl(longUrl: string): Promise<string | null> {
+/**
+ * Stash the encoded bundle on JSONblob. The service accepts arbitrary
+ * JSON anonymously and returns a Location header pointing at the new
+ * blob (e.g. `/api/jsonBlob/abc123…`). We extract just the ID; the
+ * sibling route `/api/stash/[id]` resolves it back at render time.
+ *
+ * Returns null on any failure (network, non-2xx, missing Location).
+ */
+async function stashOnJsonBlob(encoded: string): Promise<string | null> {
   try {
-    const target =
-      "https://tinyurl.com/api-create.php?" +
-      new URLSearchParams({ url: longUrl }).toString();
-    const res = await fetch(target, { method: "GET" });
-    if (!res.ok) return null;
-    const text = (await res.text()).trim();
-    return /^https?:\/\//.test(text) ? text : null;
-  } catch {
-    return null;
-  }
-}
-
-async function tryCleanUri(longUrl: string): Promise<string | null> {
-  try {
-    const res = await fetch("https://cleanuri.com/api/v1/shorten", {
+    const res = await fetch("https://jsonblob.com/api/jsonBlob", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ url: longUrl }).toString(),
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      // Wrap the encoded string so the blob is valid JSON and we can
+      // attach metadata later without a breaking change.
+      body: JSON.stringify({ encoded, v: 1 }),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { result_url?: string };
-    if (typeof data.result_url === "string" && /^https?:\/\//.test(data.result_url)) {
-      return data.result_url;
-    }
-    return null;
+    const location = res.headers.get("Location");
+    if (!location) return null;
+    const id = location.split("/").filter(Boolean).pop();
+    return id && /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
   } catch {
     return null;
   }

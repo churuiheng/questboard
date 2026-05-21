@@ -10,6 +10,7 @@ import { GenerateLinkPanel } from "@/components/quest/GenerateLinkPanel";
 import { PreviewAsRecipient } from "@/components/quest/PreviewAsRecipient";
 import { SenderHistory } from "@/components/quest/SenderHistory";
 import {
+  DEFAULT_ENDING_MESSAGE,
   bundleToQuestData,
   makeDefaultQuestBundle,
 } from "@/lib/questDefaults";
@@ -67,12 +68,26 @@ export default function CreatePage() {
       const senderIsBlank =
         base.senderName.trim().length === 0 ||
         base.senderName.trim() === "A friend";
+      // Backfill the ending message for drafts saved before the
+      // prefill default landed — an empty field in the form looks
+      // like a stumble even when the wax seal would fall back to a
+      // random cheer.
+      const existingEnding = base.ending ?? {
+        message: "",
+        image: "",
+        location: { place: "", address: "" },
+      };
+      const endingMessage =
+        existingEnding.message.trim().length === 0
+          ? DEFAULT_ENDING_MESSAGE
+          : existingEnding.message;
       const patched: QuestBundle = {
         ...base,
         recipientName:
           toTrim.length > 0 && recipientIsBlank ? toTrim : base.recipientName,
         senderName:
           fromTrim.length > 0 && senderIsBlank ? fromTrim : base.senderName,
+        ending: { ...existingEnding, message: endingMessage },
       };
       // Only call setBundle if anything actually changed — avoids a
       // wasted render when the URL has no seeds and there's no draft.

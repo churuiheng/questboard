@@ -179,9 +179,23 @@ export function makeDefaultQuestOption(): QuestOption {
   };
 }
 
-/** A blank custom ending (falls back to a random cheer at render time). */
+/**
+ * A friendly prefilled celebration line. The sender can edit it, but a
+ * blank ending message is a stumble in usability — even with the
+ * random-cheer fallback at render time, an empty form field makes the
+ * sender wonder if they should write something. Prefilling removes
+ * that friction.
+ */
+export const DEFAULT_ENDING_MESSAGE =
+  "An adventure awaits — see you there.";
+
+/** A starter ending with a sensible message + empty image/location slots. */
 export function makeDefaultEnding(): QuestEnding {
-  return { message: "", image: "" };
+  return {
+    message: DEFAULT_ENDING_MESSAGE,
+    image: "",
+    location: { place: "", address: "" },
+  };
 }
 
 export function makeDefaultQuestBundle(): QuestBundle {

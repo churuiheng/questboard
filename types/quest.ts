@@ -49,14 +49,31 @@ export type QuestNote =
 export type QuestNoteKind = QuestNote["kind"];
 
 /**
+ * Optional meeting place baked into the ending. Same shape the old
+ * per-note `location` variant carried (place + optional address +
+ * optional pinned coords). Image notes/location notes used to be a
+ * per-option `QuestNote` variant; we moved them to the ending so the
+ * recipient sees the "where + visual" only after they accept — making
+ * acceptance feel like the moment that unlocks the details.
+ */
+export type QuestEndingLocation = {
+  place: string;
+  address: string;
+  lat?: number;
+  lng?: number;
+};
+
+/**
  * The sender-customized celebration the recipient sees the instant they
- * accept (the wax-seal moment). Bundle-level — one ending per invite,
- * shared across all options.
+ * accept (the wax-seal + flip moment). Bundle-level — one ending per
+ * invite, shared across all options.
  *
- *   - `message` — the sender's celebration line. "" falls back to a
- *                 randomized cheer (`pickAcceptanceCheer`).
- *   - `image`   — optional celebratory picture, stored as a compressed
- *                 data-URL the same way image notes are ("" = none).
+ *   - `message`  — the sender's celebration line. "" falls back to a
+ *                  randomized cheer (`pickAcceptanceCheer`).
+ *   - `image`    — optional celebratory picture, stored as a compressed
+ *                  data-URL the same way image notes are ("" = none).
+ *   - `location` — optional meeting place. Absent on legacy links;
+ *                  validators default it to a blank shape.
  *
  * Optional on the bundle so links/drafts made before this existed still
  * decode; `bundleToQuestData` fills a blank default when it's absent.
@@ -64,6 +81,7 @@ export type QuestNoteKind = QuestNote["kind"];
 export type QuestEnding = {
   message: string;
   image: string;
+  location?: QuestEndingLocation;
 };
 
 /**

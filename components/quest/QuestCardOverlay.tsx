@@ -3,18 +3,17 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { QuestCard } from "./QuestCard";
+import { QuestLobbyCard } from "./QuestLobbyCard";
+import { CornerWaxStamp } from "./CornerWaxStamp";
 import { Typewriter } from "./Typewriter";
 import { SparkleBurst } from "./SparkleBurst";
 import { Confetti } from "./Confetti";
-import { ShareReplyButton } from "./ShareReplyButton";
-import { CalendarExportButton } from "./CalendarExportButton";
-import { SendOneBackButton } from "./SendOneBackButton";
 import { QuestFailedOverlay } from "./QuestFailedOverlay";
 import { Button } from "@/components/ui/Button";
 import { useSfx } from "@/components/scene/useSfx";
 import { buildMapsUrl } from "@/lib/location";
 import { pickAcceptanceCheer } from "@/lib/questDefaults";
-import type { BundleResponse, QuestData, QuestDifficulty } from "@/types/quest";
+import type { BundleResponse, QuestData } from "@/types/quest";
 
 type Props = {
   quest: QuestData;
@@ -85,17 +84,49 @@ export function QuestCardOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleAccept() {
-    onAccept();
-    setSparkleKey((k) => k + 1);
-  }
-
   // Decide what footer state to show on this option.
   let footerState: "idle" | "thisAccepted" | "otherAccepted" | "deferred";
   if (response === null) footerState = "idle";
   else if (response.kind === "maybe_later") footerState = "deferred";
   else if (response.optionIndex === index) footerState = "thisAccepted";
   else footerState = "otherAccepted";
+
+  // Three-phase flip sequence for the accept moment:
+  //
+  //   "front"     — quest details visible, no stamp
+  //   "stamping"  — wax stamp is animating in on the front; back is
+  //                 still hidden by the card not having flipped yet
+  //   "flipped"   — card has rotated 180° on Y; lobby content (back
+  //                 face) is now facing the camera
+  //
+  // The initial value is keyed to the persisted response — a recipient
+  // returning to an already-accepted quest lands directly on "flipped"
+  // (no replay of the stamp animation), while a fresh Accept click runs
+  // through stamping → flipped over ~750ms.
+  const [flipPhase, setFlipPhase] = useState<
+    "front" | "stamping" | "flipped"
+  >(() => (footerState === "thisAccepted" ? "flipped" : "front"));
+
+  function handleAccept() {
+    onAccept();
+    setSparkleKey((k) => k + 1);
+    // Sequence the dramatic moment: stamp lands, holds for a beat so
+    // the eye registers it, then the card turns over.
+    setFlipPhase("stamping");
+    window.setTimeout(() => setFlipPhase("flipped"), 750);
+  }
+
+  /**
+   * "Change my mind" wraps the parent's onResetResponse so the card
+   * gets to flip back to the front *first* — otherwise the lobby
+   * content would pop out of view as the response clears, which
+   * looks abrupt. We trigger the flip immediately and delay the
+   * actual reset until the rotation finishes (~600ms).
+   */
+  function handleResetWithFlip() {
+    setFlipPhase("front");
+    window.setTimeout(() => onResetResponse(), 620);
+  }
 
   const mapsUrl =
     quest.note.kind === "location"
@@ -117,7 +148,12 @@ export function QuestCardOverlay({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="absolute inset-0 z-20 flex items-center justify-center px-4 py-12 sm:py-16"
+      // `items-center` centers the card when it fits the viewport;
+      // when the lobby card runs taller than the viewport (image +
+      // location + buttons), the browser would otherwise clip the
+      // top edge — `overflow-y-auto` falls back to a scrollable
+      // modal so the whole card stays reachable.
+      className="absolute inset-0 z-20 flex items-center justify-center overflow-y-auto px-4 py-12 sm:py-16"
     >
       {/* Dimming backdrop — clicking it closes the card. */}
       <button
@@ -148,6 +184,32 @@ export function QuestCardOverlay({
           </>
         ) : null}
 
+        {/* True 3D card flip. The parent has `perspective` set so
+            child rotateY produces depth. The inner rotates from 0°
+            (front facing camera) to 180° (back facing camera). Front
+            and back each have `backfaceVisibility: hidden`, so only
+            one is visible at a time during the rotation. The back is
+            pre-rotated 180° on its own axis so it appears upright
+            once the parent reaches 180°.
+            Sizing: both faces share a single grid cell (`grid-area:
+            stack`) so the container takes the height of whichever
+            face is taller. This stops the card from shifting size or
+            position between front (quest details) and back (lobby) —
+            the recipient sees the same outer frame turn over in
+            place. */}
+        <div className="relative" style={{ perspective: "1400px" }}>
+          <motion.div
+            className="relative grid w-full [grid-template-areas:'stack']"
+            style={{ transformStyle: "preserve-3d" }}
+            animate={{ rotateY: flipPhase === "flipped" ? 180 : 0 }}
+            transition={{ duration: 0.72, ease: [0.45, 0.05, 0.25, 1] }}
+          >
+            {/* Front face */}
+            <div
+              style={{ backfaceVisibility: "hidden", gridArea: "stack" }}
+              className="relative"
+              aria-hidden={flipPhase === "flipped"}
+            >
         <QuestCard
           data={quest}
           variant="scene"
@@ -258,32 +320,12 @@ export function QuestCardOverlay({
                   </motion.div>
                 ) : null}
 
-                {footerState === "thisAccepted" ? (
-                  <motion.div
-                    key="accepted"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4 }}
-                    className="flex flex-col items-center gap-3"
-                  >
-                    <AcceptedBanner
-                      ending={quest.ending}
-                      cheer={cheer}
-                      difficulty={quest.difficulty}
-                    />
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <CalendarExportButton quest={quest} />
-                      <ShareReplyButton quest={quest} />
-                      <SendOneBackButton quest={quest} />
-                    </div>
-                    <button
-                      onClick={onResetResponse}
-                      className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-soft/60 underline-offset-2 hover:text-ink-soft hover:underline"
-                    >
-                      Change my mind
-                    </button>
-                  </motion.div>
-                ) : null}
+                {/* The accepted state used to render inside this footer
+                    (and inside the card). It now lives OUTSIDE the
+                    card so the parchment can keep a steady height
+                    while the wax seal stamps onto it. See
+                    `<AcceptedPanel/>` rendered after the QuestCard
+                    below. */}
 
                 {footerState === "otherAccepted" ? (
                   <motion.div
@@ -325,6 +367,43 @@ export function QuestCardOverlay({
             </div>
           }
         />
+
+              {/* Wax stamp lands on the FRONT of the card top-right
+                  while the flip phase is "stamping" or "flipped".
+                  Wrapper is pointer-events-none + z-10 so it overlays
+                  the card without intercepting clicks. */}
+              <AnimatePresence>
+                {flipPhase !== "front" ? (
+                  <div
+                    key="front-stamp"
+                    className="pointer-events-none absolute right-5 top-5 z-10 sm:right-7 sm:top-6"
+                  >
+                    <CornerWaxStamp difficulty={quest.difficulty} />
+                  </div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+
+            {/* Back face — pre-rotated 180° on Y so the lobby reads
+                upright once the parent has rotated. Shares the same
+                grid cell as the front so the wrapper's height is
+                max(front, back) — no size jump between faces. */}
+            <div
+              style={{
+                backfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                gridArea: "stack",
+              }}
+              aria-hidden={flipPhase !== "flipped"}
+            >
+              <QuestLobbyCard
+                quest={quest}
+                cheer={cheer}
+                onResetResponse={handleResetWithFlip}
+              />
+            </div>
+          </motion.div>
+        </div>
 
         {/* Close button — top right of the card */}
         <button
@@ -431,114 +510,6 @@ export function QuestCardOverlay({
  * glyph — the outer (darker) color sits around L*30, the inner
  * highlight around L*60.
  */
-const SEAL_DESIGN: Record<
-  QuestDifficulty,
-  { gradient: string; deep: string; ariaLabel: string }
-> = {
-  cozy: {
-    gradient: "radial-gradient(circle at 35% 30%,#a3c065,#4d6b2c 70%)",
-    deep: "#3e5a22",
-    ariaLabel: "Cozy quest accepted",
-  },
-  normal: {
-    gradient: "radial-gradient(circle at 35% 30%,#e8854b,#c0521f 70%)",
-    deep: "#8a3a16",
-    ariaLabel: "Quest accepted",
-  },
-  legendary: {
-    gradient: "radial-gradient(circle at 35% 30%,#e36c3e,#8a2a14 70%)",
-    deep: "#6b1f10",
-    ariaLabel: "Legendary quest accepted",
-  },
-  secret: {
-    gradient: "radial-gradient(circle at 35% 30%,#a78dc4,#4e2e62 70%)",
-    deep: "#3d2150",
-    ariaLabel: "Secret mission accepted",
-  },
-};
-
-/**
- * The payoff. Since nothing is sent to a server, the reward for
- * accepting is the moment itself: a wax seal "stamps" down onto the
- * parchment with a spring overshoot. The seal is themed by difficulty
- * (see `SEAL_DESIGN`) so each acceptance feels specific. The sender
- * can customize the line + image via the bundle's `ending`.
- * (SparkleBurst + difficulty-tinted Confetti fire alongside this from
- * the parent.)
- */
-function AcceptedBanner({
-  ending,
-  cheer,
-  difficulty,
-}: {
-  ending: QuestData["ending"];
-  cheer: string;
-  difficulty: QuestDifficulty;
-}) {
-  const line = ending.message.trim() || cheer;
-  const design = SEAL_DESIGN[difficulty];
-  return (
-    <div className="flex flex-col items-center gap-2 self-center text-center">
-      <motion.div
-        initial={{ scale: 1.7, rotate: -16, opacity: 0 }}
-        animate={{ scale: 1, rotate: -6, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 520, damping: 17, mass: 0.7 }}
-        aria-label={design.ariaLabel}
-        role="img"
-        className="relative flex h-20 w-20 items-center justify-center rounded-full text-parchment shadow-[0_6px_16px_-4px_rgba(0,0,0,0.55),inset_0_2px_6px_rgba(255,255,255,0.25),inset_0_-4px_8px_rgba(0,0,0,0.35)] ring-2"
-        style={{
-          backgroundImage: design.gradient,
-          // Tailwind can't do dynamic ring colors with arbitrary hex,
-          // so we set it via CSS variable here (Tailwind reads
-          // --tw-ring-color).
-          ["--tw-ring-color" as string]: `${design.deep}99`,
-        }}
-      >
-        {/* Scalloped wax rim */}
-        <span
-          aria-hidden
-          className="absolute inset-0 rounded-full border border-dashed border-parchment/30"
-        />
-        {/* The theme's signature ✦ star — same dingbat used as
-            dividers across the card. Cream-on-wax. */}
-        <span
-          aria-hidden
-          className="font-display text-3xl font-bold leading-none text-parchment drop-shadow"
-        >
-          ✦
-        </span>
-      </motion.div>
-      <div>
-        <div
-          className="font-display text-sm uppercase tracking-[0.26em]"
-          style={{ color: design.deep }}
-        >
-          Quest Accepted
-        </div>
-        <div className="mt-0.5 max-w-[18rem] font-serif text-[12px] italic text-ink-soft/85">
-          {line}
-        </div>
-      </div>
-      {ending.image ? (
-        <motion.figure
-          initial={{ opacity: 0, scale: 0.9, y: 6 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ delay: 0.28, type: "spring", stiffness: 260, damping: 22 }}
-          className="m-0 mt-1"
-        >
-          {/* Sender-supplied celebratory image, baked into the bundle. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={ending.image}
-            alt="A celebration from the sender"
-            className="max-h-52 w-full rounded-md object-contain ring-1 ring-ink/15"
-          />
-        </motion.figure>
-      ) : null}
-    </div>
-  );
-}
-
 function DeferredBanner() {
   return (
     <div className="flex items-center gap-3 rounded-full bg-ink/10 px-4 py-2 ring-1 ring-ink-soft/30">

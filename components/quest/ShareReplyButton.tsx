@@ -7,21 +7,20 @@ import { shareAcceptance } from "@/lib/share";
 import type { QuestData } from "@/types/quest";
 
 /**
- * "Tell [sender] you accepted" — opens the device's native share sheet
- * (iOS/Android, plus Chrome/Safari desktop) prefilled with a friendly
- * acceptance message. Falls back to clipboard with a brief confirmation
- * if the Share API isn't available.
+ * "Share ↗" — opens the device's native share sheet (iOS/Android, plus
+ * Chrome/Safari desktop) prefilled with a friendly acceptance message
+ * so the recipient can forward the quest link to anyone. Falls back to
+ * clipboard with a brief confirmation if the Share API isn't available.
+ *
+ * Label used to be "Tell [sender]" but the From field was removed from
+ * the form — without an explicitly-typed sender name, personalising
+ * the button could only ever read as "Tell A friend" or pick up stale
+ * data from old links. A neutral "Share" reads cleanly in every case.
  */
 export function ShareReplyButton({ quest }: { quest: QuestData }) {
   const [status, setStatus] = useState<"idle" | "shared" | "copied" | "failed">(
     "idle",
   );
-
-  // Friendly label using the sender's name, with sensible fallbacks
-  // for the default ("A friend") and blank cases.
-  const senderRaw = quest.senderName.trim();
-  const senderLabel =
-    senderRaw && senderRaw.toLowerCase() !== "a friend" ? senderRaw : "them";
 
   async function handleShare() {
     const url = typeof window !== "undefined" ? window.location.href : "";
@@ -41,7 +40,7 @@ export function ShareReplyButton({ quest }: { quest: QuestData }) {
         ? "Copied ✓"
         : status === "failed"
           ? "Try again"
-          : `Tell ${senderLabel} ↗`;
+          : "Share ↗";
 
   return (
     <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>

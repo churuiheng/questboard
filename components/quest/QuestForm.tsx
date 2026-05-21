@@ -1,16 +1,18 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import type {
   QuestBundle,
   QuestEnding,
+  QuestEndingLocation,
   QuestNote,
   QuestOption,
 } from "@/types/quest";
 import {
   MAX_OPTIONS,
+  acceptanceCheers,
   activityPresets,
   fieldLimits,
   makeDefaultQuestOption,
@@ -25,6 +27,7 @@ import {
 import { Field, TextArea, TextInput } from "@/components/ui/Field";
 import { CalendarDropdown } from "@/components/quest/CalendarDropdown";
 import { VibeDropdown } from "@/components/quest/VibeDropdown";
+import { PlaceAutocomplete } from "@/components/quest/PlaceAutocomplete";
 
 // Leaflet touches `window` and ships its own CSS — load it only when the
 // Location note variant is actually used, and never on the server.
@@ -307,17 +310,6 @@ export function QuestForm({ value, onChange }: Props) {
         />
       </SectionCard>
 
-      {/* SENDER */}
-      <CollapsibleCard label="From — your name on the card">
-        <Field label="From">
-          <TextInput
-            value={value.senderName}
-            maxLength={fieldLimits.senderName}
-            placeholder="A friend"
-            onChange={(e) => patchBundle({ senderName: e.target.value })}
-          />
-        </Field>
-      </CollapsibleCard>
     </form>
   );
 }
@@ -356,6 +348,14 @@ function pickRandomString(presets: string[], current: string): string {
  * Toggling between variants doesn't discard the others' content — each
  * side being left is stashed in a ref so flipping back restores it.
  */
+/**
+ * Per-option note editor — text only now. Image and location moved
+ * to the bundle-level Ending section so the recipient unlocks them
+ * by accepting, which makes acceptance feel like the moment that
+ * reveals "where + visual." Old shared links with image/location
+ * notes still decode (the centerpiece in QuestCard handles them as
+ * a fallback), but the form only creates text notes going forward.
+ */
 function NoteEditor({
   note,
   onChange,
@@ -363,249 +363,126 @@ function NoteEditor({
   note: QuestNote;
   onChange: (next: QuestNote) => void;
 }) {
-  const inputId = useId();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Last-seen value for each variant the user isn't currently editing,
-  // so a toggle round-trip is lossless. Seeded from the initial note.
-  const stash = useRef({
-    text: note.kind === "text" ? note.text : "",
-    image: note.kind === "image" ? note.image : "",
-    caption: note.kind === "image" ? note.caption : "",
-    place: note.kind === "location" ? note.place : "",
-    address: note.kind === "location" ? note.address : "",
-  });
-
-  function stashCurrent() {
-    if (note.kind === "text") stash.current.text = note.text;
-    else if (note.kind === "image") {
-      stash.current.image = note.image;
-      stash.current.caption = note.caption;
-    } else {
-      stash.current.place = note.place;
-      stash.current.address = note.address;
-    }
-  }
-
-  function selectKind(kind: QuestNote["kind"]) {
-    if (kind === note.kind) return;
-    setError(null);
-    stashCurrent(); // preserve whatever we're leaving before swapping
-    if (kind === "image") {
-      onChange({
-        kind: "image",
-        image: stash.current.image,
-        caption: stash.current.caption,
-      });
-    } else if (kind === "location") {
-      onChange({
-        kind: "location",
-        place: stash.current.place,
-        address: stash.current.address,
-      });
-    } else {
-      onChange({ kind: "text", text: stash.current.text });
-    }
-  }
-
-  async function handleFile(file: File | undefined) {
-    if (!file) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const dataUrl = await fileToImageNoteDataUrl(file);
-      onChange({
-        kind: "image",
-        image: dataUrl,
-        caption: note.kind === "image" ? note.caption : stash.current.caption,
-      });
-    } catch (err) {
-      setError(
-        isImageNoteError(err)
-          ? describeImageNoteError(err)
-          : "Couldn't process that image.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
+  // We always present a text editor regardless of the underlying
+  // note kind. For legacy bundles where the note happens to be
+  // image/location, editing here resets it to text — that's the
+  // intentional migration path.
+  const currentText = note.kind === "text" ? note.text : "";
 
   return (
-    <div className="flex flex-col gap-3">
-      <NoteKindToggle active={note.kind} onSelect={selectKind} />
-
-      {note.kind === "text" ? (
-        <InputWithAction align="start">
-          <div className="relative w-full">
-            <TextArea
-              value={note.text}
-              maxLength={fieldLimits.message}
-              placeholder="Write a short note for the recipient…"
-              onChange={(e) => onChange({ kind: "text", text: e.target.value })}
-            />
-            <CharCounter current={note.text.length} max={fieldLimits.message} />
-          </div>
-          <RandomizeButton
-            label="Randomize the message"
-            onClick={() => {
-              const next = pickRandomString(
-                messageTemplates.map((t) => t.text),
-                note.text,
-              );
-              onChange({ kind: "text", text: next });
-            }}
-          />
-        </InputWithAction>
-      ) : note.kind === "image" ? (
-        <div className="flex flex-col gap-3">
-          {note.image ? (
-            <div className="relative overflow-hidden rounded-lg border border-parchment/15 bg-ink/40">
-              {/* Data-URL preview; not a remote asset, so next/image
-                  buys nothing here. */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={note.image}
-                alt="Your image note preview"
-                className="max-h-56 w-full object-contain"
-              />
-              <label
-                htmlFor={inputId}
-                className="absolute right-2 top-2 cursor-pointer rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
-              >
-                {busy ? "Shrinking…" : "Replace"}
-              </label>
-            </div>
-          ) : (
-            <label
-              htmlFor={inputId}
-              className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-parchment/25 bg-ink/30 px-4 py-7 text-center transition hover:border-gold/50"
-            >
-              <span className="font-display text-xs uppercase tracking-[0.22em] text-gold/80">
-                {busy ? "Shrinking…" : "Choose an image"}
-              </span>
-              <span className="text-[11px] text-parchment/45">
-                It rides inside the link, so it gets auto-shrunk small.
-              </span>
-            </label>
-          )}
-
-          <input
-            id={inputId}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            disabled={busy}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              // Reset so picking the same file again still fires change.
-              e.currentTarget.value = "";
-              handleFile(f);
-            }}
-          />
-
-          {error ? (
-            <p className="text-[11px] text-ember" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <TextInput
-            value={note.caption}
-            maxLength={fieldLimits.caption}
-            placeholder="Caption (optional)"
-            onChange={(e) =>
-              onChange({
-                kind: "image",
-                image: note.image,
-                caption: e.target.value,
-              })
-            }
-          />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <TextInput
-            value={note.place}
-            maxLength={fieldLimits.place}
-            placeholder="Place name — e.g. The Cozy Ramen Spot"
-            aria-label="Place name"
-            onChange={(e) => onChange({ ...note, place: e.target.value })}
-          />
-          <TextInput
-            value={note.address}
-            maxLength={fieldLimits.address}
-            placeholder="Address or area (optional)"
-            aria-label="Address"
-            onChange={(e) => onChange({ ...note, address: e.target.value })}
-          />
-          <LocationPicker
-            value={{ lat: note.lat, lng: note.lng }}
-            onChange={({ lat, lng }) => onChange({ ...note, lat, lng })}
-            onClear={() => {
-              const { lat: _lat, lng: _lng, ...rest } = note;
-              void _lat;
-              void _lng;
-              onChange(rest);
-            }}
-          />
-          <p className="text-[11px] text-parchment/45">
-            {note.lat !== undefined
-              ? "Pinned ✓ — the “Open in Maps” link will land on this exact spot."
-              : "Drop a pin (or type a place) and we’ll add an “Open in Maps” link. No map image is stored, so the link stays tiny."}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function NoteKindToggle({
-  active,
-  onSelect,
-}: {
-  active: QuestNote["kind"];
-  onSelect: (kind: QuestNote["kind"]) => void;
-}) {
-  const kinds: { value: QuestNote["kind"]; label: string }[] = [
-    { value: "text", label: "Text" },
-    { value: "image", label: "Image" },
-    { value: "location", label: "Location" },
-  ];
-  return (
-    <div className="inline-flex self-start rounded-full border border-parchment/15 bg-ink/40 p-0.5">
-      {kinds.map((k) => {
-        const on = k.value === active;
-        return (
-          <button
-            key={k.value}
-            type="button"
-            aria-pressed={on}
-            onClick={() => onSelect(k.value)}
-            className={
-              "rounded-full px-3.5 py-1.5 font-display text-[10px] uppercase tracking-[0.2em] transition " +
-              (on ? "bg-gold text-ink" : "text-parchment/60 hover:text-parchment")
-            }
-          >
-            {k.label}
-          </button>
-        );
-      })}
-    </div>
+    <InputWithAction align="start">
+      <div className="relative w-full">
+        <TextArea
+          value={currentText}
+          maxLength={fieldLimits.message}
+          placeholder="Write a short note for the recipient…"
+          onChange={(e) => onChange({ kind: "text", text: e.target.value })}
+        />
+        <CharCounter current={currentText.length} max={fieldLimits.message} />
+      </div>
+      <RandomizeButton
+        label="Randomize the message"
+        onClick={() => {
+          const next = pickRandomString(
+            messageTemplates.map((t) => t.text),
+            currentText,
+          );
+          onChange({ kind: "text", text: next });
+        }}
+      />
+    </InputWithAction>
   );
 }
 
 /* ------------------------------------------------------------ ending editor */
 
 /**
- * Bundle-level editor for the post-accept celebration: a custom line
- * (blank → a randomized cheer at render time) and an optional
- * celebratory image, compressed into the share URL the same way image
- * notes are. A small static preview mirrors what the recipient gets the
- * moment they hit Accept (the live animated version is the wax seal in
- * QuestCardOverlay).
+ * Bundle-level editor for the post-accept reveal: the celebration
+ * line, an optional image, and an optional meeting place.
+ *
+ * Layout: a generous vertical stack with `gap-5` between zones and
+ * the EndingPreview pinned to the right at sm+. Each zone has its own
+ * eyebrow label and reads as a distinct beat. No nested cards — the
+ * outer SectionCard already provides one frame; adding more was the
+ * source of the old "cluttered" feel.
+ *
+ *   ── Message ────────  textarea + ↻ randomize
+ *   ── Celebration ────  collapsible image picker
+ *   ── Meeting place ──  Photon autocomplete + map pin
  */
 function EndingEditor({
+  value,
+  onChange,
+}: {
+  value: QuestEnding;
+  onChange: (next: QuestEnding) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-5 sm:flex-row sm:gap-6">
+      <div className="flex flex-1 flex-col gap-5">
+        <EndingMessageField value={value} onChange={onChange} />
+        <EndingImageField value={value} onChange={onChange} />
+        <EndingLocationEditor
+          value={value.location ?? { place: "", address: "" }}
+          onChange={(next) => onChange({ ...value, location: next })}
+        />
+      </div>
+
+      <EndingPreview value={value} />
+    </div>
+  );
+}
+
+/**
+ * The message zone. Always prefilled (via makeDefaultEnding's
+ * DEFAULT_ENDING_MESSAGE), with a ↻ randomize button that picks from
+ * the same `acceptanceCheers` pool the wax-seal moment uses at render
+ * time — so the prefill and the randomize button feel like part of
+ * the same vocabulary.
+ */
+function EndingMessageField({
+  value,
+  onChange,
+}: {
+  value: QuestEnding;
+  onChange: (next: QuestEnding) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/70">
+        Their celebration line
+      </span>
+      <InputWithAction align="start">
+        <div className="relative w-full">
+          <TextArea
+            value={value.message}
+            maxLength={fieldLimits.endingMessage}
+            placeholder="What they see the moment they accept…"
+            onChange={(e) => onChange({ ...value, message: e.target.value })}
+          />
+          <CharCounter
+            current={value.message.length}
+            max={fieldLimits.endingMessage}
+          />
+        </div>
+        <RandomizeButton
+          label="Randomize the celebration line"
+          onClick={() => {
+            const next = pickRandomString(acceptanceCheers, value.message);
+            onChange({ ...value, message: next });
+          }}
+        />
+      </InputWithAction>
+    </div>
+  );
+}
+
+/**
+ * The celebration image zone. Compact at rest (a single CTA button
+ * matching the form's other affordances), then expands into a preview
+ * + Replace / Remove controls once an image is loaded.
+ */
+function EndingImageField({
   value,
   onChange,
 }: {
@@ -635,78 +512,128 @@ function EndingEditor({
   }
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row">
-      <div className="flex flex-1 flex-col gap-2">
-        <div className="relative w-full">
-          <TextArea
-            value={value.message}
-            maxLength={fieldLimits.endingMessage}
-            placeholder="What they see the moment they accept… (leave blank for a surprise cheer)"
-            onChange={(e) => onChange({ ...value, message: e.target.value })}
-          />
-          <CharCounter
-            current={value.message.length}
-            max={fieldLimits.endingMessage}
-          />
-        </div>
+    <div className="flex flex-col gap-2">
+      <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/70">
+        Celebration image (optional)
+      </span>
 
-        {value.image ? (
-          <div className="relative overflow-hidden rounded-lg border border-parchment/15 bg-ink/40">
-            {/* Data-URL preview baked into the bundle. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={value.image}
-              alt="Your celebration image"
-              className="max-h-40 w-full object-contain"
-            />
-            <div className="absolute right-2 top-2 flex gap-1.5">
-              <label
-                htmlFor={inputId}
-                className="cursor-pointer rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
-              >
-                {busy ? "Shrinking…" : "Replace"}
-              </label>
-              <button
-                type="button"
-                onClick={() => onChange({ ...value, image: "" })}
-                className="rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
-              >
-                Remove
-              </button>
-            </div>
+      {value.image ? (
+        <div className="relative overflow-hidden rounded-lg border border-parchment/15 bg-ink/40">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={value.image}
+            alt="Your celebration image"
+            className="max-h-40 w-full object-contain"
+          />
+          <div className="absolute right-2 top-2 flex gap-1.5">
+            <label
+              htmlFor={inputId}
+              className="cursor-pointer rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
+            >
+              {busy ? "Shrinking…" : "Replace"}
+            </label>
+            <button
+              type="button"
+              onClick={() => onChange({ ...value, image: "" })}
+              className="rounded-full bg-ink/80 px-3 py-1 font-display text-[10px] uppercase tracking-[0.2em] text-parchment ring-1 ring-parchment/20 hover:bg-ember"
+            >
+              Remove
+            </button>
           </div>
-        ) : (
-          <label
-            htmlFor={inputId}
-            className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-parchment/25 bg-ink/30 px-4 py-3 text-center transition hover:border-gold/50"
-          >
-            <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/80">
-              {busy ? "Shrinking…" : "Add a celebration image (optional)"}
-            </span>
-          </label>
-        )}
+        </div>
+      ) : (
+        <label
+          htmlFor={inputId}
+          className="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-parchment/25 bg-ink/30 px-4 py-2 text-center transition hover:border-gold/50"
+        >
+          <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/80">
+            {busy ? "Shrinking…" : "Add a celebration image"}
+          </span>
+        </label>
+      )}
 
-        <input
-          id={inputId}
-          type="file"
-          accept="image/*"
-          className="sr-only"
-          disabled={busy}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.currentTarget.value = "";
-            handleFile(f);
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        disabled={busy}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.currentTarget.value = "";
+          handleFile(f);
+        }}
+      />
+
+      {error ? (
+        <p className="text-[11px] text-ember" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Meeting-place editor. The old version had two separate text fields
+ * (place + address) plus a map. The map alone gives us coords; for
+ * the human-readable bits we now use one input — a Photon-backed
+ * autocomplete that fills both `place` and `address` from a single
+ * suggestion pick. Senders who'd rather just type free-form can do
+ * that too; the dropdown stays out of the way.
+ *
+ * Map shrinks once you've picked something so the form doesn't dwell
+ * on it visually after the decision is made.
+ */
+function EndingLocationEditor({
+  value,
+  onChange,
+}: {
+  value: QuestEndingLocation;
+  onChange: (next: QuestEndingLocation) => void;
+}) {
+  const hasPlace = value.place.trim().length > 0;
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="font-display text-[10px] uppercase tracking-[0.22em] text-gold/70">
+        Meeting place (optional)
+      </span>
+
+      <PlaceAutocomplete
+        value={value.place}
+        maxLength={fieldLimits.place}
+        onChange={(place) => onChange({ ...value, place })}
+        onSelectSuggestion={(pick) =>
+          onChange({
+            place: pick.place,
+            address: pick.address,
+            lat: pick.lat,
+            lng: pick.lng,
+          })
+        }
+      />
+
+      {/* The map stays available for "drop a pin manually" cases but
+          is collapsed visually when the user hasn't typed anything,
+          so the section breathes when empty. */}
+      {hasPlace ? (
+        <LocationPicker
+          value={{ lat: value.lat, lng: value.lng }}
+          onChange={({ lat, lng }) => onChange({ ...value, lat, lng })}
+          onClear={() => {
+            const { lat: _lat, lng: _lng, ...rest } = value;
+            void _lat;
+            void _lng;
+            onChange(rest);
           }}
         />
+      ) : null}
 
-        {error ? (
-          <p className="text-[11px] text-ember" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
-
-      <EndingPreview value={value} />
+      <p className="text-[11px] text-parchment/45">
+        {value.lat !== undefined
+          ? "Pinned ✓ — the recipient gets an exact \"Open in Maps\" link after they accept."
+          : "Pick from the dropdown for the most accurate pin. Revealed after Accept."}
+      </p>
     </div>
   );
 }
@@ -769,26 +696,6 @@ function SectionCard({
       </div>
       {children}
     </section>
-  );
-}
-
-function CollapsibleCard({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <details className="group rounded-2xl border border-parchment/10 bg-ink/25 p-4 open:p-5 sm:p-5">
-      <summary className="flex cursor-pointer items-center justify-between gap-2 font-display text-[11px] uppercase tracking-[0.28em] text-parchment/55 transition-colors hover:text-parchment marker:hidden [&::-webkit-details-marker]:hidden">
-        <span>{label}</span>
-        <span aria-hidden className="text-base text-gold/70 transition-transform group-open:rotate-45">
-          +
-        </span>
-      </summary>
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
-    </details>
   );
 }
 
