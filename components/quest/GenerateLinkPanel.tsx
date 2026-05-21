@@ -6,6 +6,7 @@ import type { QuestBundle } from "@/types/quest";
 import { encodeQuestBundle } from "@/lib/questCodec";
 import { recordSend } from "@/lib/senderHistory";
 import { shortenUrl } from "@/lib/shortenUrl";
+import { truncateUrl } from "@/lib/truncateUrl";
 import { Button } from "@/components/ui/Button";
 import { QrCode } from "./QrCode";
 
@@ -88,9 +89,30 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
         setCopiedFor((current) => (current === encoded ? null : current));
       }, 1800);
     } catch {
-      // Clipboard can fail on insecure contexts; fall back to selecting the input.
-      const input = document.getElementById("quest-link-input") as HTMLInputElement | null;
-      input?.select();
+      // Clipboard API can fail on insecure contexts (older Safari over
+      // http://). Fall back to the legacy execCommand path via a
+      // hidden textarea — not as clean but lets the link still reach
+      // the clipboard. We removed the visible input that the user
+      // could previously select manually (it now displays a truncated
+      // URL, which would copy wrong), so the fallback owns the path.
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = displayLink;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        setCopiedFor(encoded);
+        noteShared();
+        window.setTimeout(() => {
+          setCopiedFor((current) => (current === encoded ? null : current));
+        }, 1800);
+      } catch {
+        // Nothing more we can do; the user can still use Open / QR.
+      }
     }
   }
 
@@ -100,26 +122,74 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   }
 
   /**
-   * Request a short version of the current link via the `/api/shorten`
-   * proxy. Loading state guards against double-clicks; errors render
-   * inline beside the panel rather than via a toast (less invasive,
-   * and the panel already owns a footprint for status text).
+   * Auto-shorten the link the moment it's revealed and any time the
+   * encoded bundle changes thereafter. Debounced so a rapid sequence
+   * of edits doesn't hammer `/api/shorten`. A `cancelled` flag guards
+   * the resolve path against the user editing again while a fetch is
+   * in flight (race: a stale fetch must not write a short URL keyed
+   * to an obsolete encoded value).
+   *
+   * On failure we silently fall back to the long link — it still
+   * works, and the inline error UI offers a Retry. This is the whole
+   * point of the change: senders shouldn't have to click "Shorten"
+   * then "Copy" — Copy alone always yields the shortest URL we can
+   * produce at that moment.
    */
-  async function handleShorten() {
-    if (shortenStatus === "loading") return;
-    setShortenStatus("loading");
+  useEffect(() => {
+    if (!revealed) return;
+    // Already have a fresh short URL for the current encoded? Skip.
+    if (shortFor && shortFor.encoded === encoded) return;
+
+    let cancelled = false;
+    // Microtask wrapper keeps the linter happy ("no sync setState in
+    // effect body" — same pattern as the saveTick effect above).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setShortenStatus("loading");
+      setShortenError(null);
+    });
+
+    // Debounce: wait for the bundle to settle before calling the API.
+    // 600ms pairs nicely with the 400ms draft-autosave so we don't
+    // shorten partial keystrokes.
+    const timer = window.setTimeout(() => {
+      shortenUrl(link).then((result) => {
+        if (cancelled) return;
+        if (result.ok) {
+          setShortFor({ encoded, url: result.shortUrl });
+          setShortenStatus("idle");
+          // Clear any prior "Copied" badge — the clipboard now refers
+          // to the old long URL while a freshly shortened one is
+          // available; the user should see they can copy again.
+          setCopiedFor((current) => (current === encoded ? null : current));
+        } else {
+          setShortenStatus("error");
+          setShortenError(result.error);
+        }
+      });
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // shortFor is intentionally in the deps so a successful shorten
+    // doesn't immediately retrigger (the guard at the top of the
+    // effect catches it). encoded + link change together.
+  }, [revealed, encoded, link, shortFor]);
+
+  /**
+   * Manual retry — only surfaced inline when auto-shorten failed.
+   * Resets status so the auto-shorten effect retries on the next
+   * render cycle (we briefly clear shortFor so the guard re-arms).
+   */
+  function handleRetryShorten() {
+    setShortenStatus("idle");
     setShortenError(null);
-    const result = await shortenUrl(link);
-    if (result.ok) {
-      setShortFor({ encoded, url: result.shortUrl });
-      setShortenStatus("idle");
-      // Clear any prior "Copied" badge so the user doesn't think the
-      // clipboard already holds the new short URL.
-      setCopiedFor(null);
-    } else {
-      setShortenStatus("error");
-      setShortenError(result.error);
-    }
+    // Touch shortFor so the auto-shorten effect re-runs even if the
+    // encoded hasn't changed. Setting to null is safe — displayLink
+    // will fall back to the long URL until the new short arrives.
+    setShortFor(null);
   }
 
   /**
@@ -231,19 +301,67 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
 
       {revealed ? (
         <>
-          <input
+          {/* Display-only truncated view of the link — the full URL
+              is what gets copied / opened / encoded in the QR. We
+              render a click-to-copy button instead of an <input>
+              because copying selected text from a truncated input
+              would put the elided string on the clipboard, which is
+              broken. Tooltip exposes the full URL on hover. */}
+          <button
             id="quest-link-input"
-            readOnly
-            value={displayLink}
-            onFocus={(e) => e.currentTarget.select()}
-            aria-label="Shareable quest link"
-            className="w-full rounded-lg border border-parchment/15 bg-ink/40 px-3 py-2 font-mono text-[11px] text-parchment/80 outline-none focus:border-gold/60 focus:ring-2 focus:ring-gold/30"
-          />
+            type="button"
+            onClick={handleCopy}
+            aria-label={`Copy quest link: ${displayLink}`}
+            title={displayLink}
+            className="group flex w-full items-center justify-between gap-2 rounded-lg border border-parchment/15 bg-ink/40 px-3 py-2 text-left font-mono text-[11px] text-parchment/80 outline-none transition-colors hover:border-gold/40 focus-visible:border-gold/60 focus-visible:ring-2 focus-visible:ring-gold/30"
+          >
+            <span className="truncate">{truncateUrl(displayLink)}</span>
+            <span
+              aria-hidden
+              className="shrink-0 font-display text-[9px] uppercase tracking-[0.22em] text-parchment/40 transition-colors group-hover:text-gold/70"
+            >
+              {isCopied ? "Copied" : "Copy"}
+            </span>
+          </button>
 
-          {isShortened ? (
-            <p className="text-[11px] text-parchment/55">
-              <span className="text-gold/80">Shortened ✓</span> — points to
-              the full quest link.
+          {/* Inline status row beneath the link — replaces the old
+              "Shorten ↗" button + length-meter combo. Auto-shorten
+              handles the work; this just keeps the sender informed:
+                - loading: tiny "Shortening…" hint
+                - success: "Shortened ✓" confirmation
+                - error:   message + Retry link (rare path; long URL
+                  still works in the meantime)
+                - long link, no shortener yet: the length meter so the
+                  sender knows their image-note link is heavy. */}
+          {shortenStatus === "loading" ? (
+            <p
+              className="text-[11px] text-parchment/55"
+              role="status"
+              aria-live="polite"
+            >
+              Shortening the link…
+            </p>
+          ) : isShortened ? (
+            <p className="text-[11px] text-parchment/55" role="status">
+              <span className="text-gold/80">Shortened ✓</span> — copy goes
+              straight to the friendly short link.
+            </p>
+          ) : shortenStatus === "error" && shortenError ? (
+            <p
+              role="alert"
+              className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-ember"
+            >
+              <span>{shortenError}</span>
+              <button
+                type="button"
+                onClick={handleRetryShorten}
+                className="font-display text-[10px] uppercase tracking-[0.18em] text-gold/80 underline-offset-2 hover:text-gold hover:underline"
+              >
+                Retry
+              </button>
+              <span className="text-parchment/55">
+                — the full link still works.
+              </span>
             </p>
           ) : (
             <LengthMeter
@@ -266,45 +384,14 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
             >
               {qrVisible ? "Hide QR" : "Show QR"}
             </Button>
-            <Button
-              variant="ghost"
-              size="md"
-              onClick={handleShorten}
-              disabled={shortenStatus === "loading" || isShortened}
-              aria-live="polite"
-            >
-              {isShortened
-                ? "Shortened ✓"
-                : shortenStatus === "loading"
-                  ? "Shortening…"
-                  : "Shorten ↗"}
-            </Button>
-            {tooLong && !isShortened ? (
+            {tooLong && !isShortened && shortenStatus !== "loading" ? (
               <span className="text-[11px] text-ember">
                 {hasImageNote
-                  ? "This link is long because the image travels inside it — try Shorten ↗, or switch to a text/location note."
-                  : "This one's a long link — Shorten ↗ should help."}
+                  ? "Image-heavy link — switching to a text/location note keeps it tiny."
+                  : "Heads up — this link is on the long side."}
               </span>
             ) : null}
           </div>
-
-          {/* Shortener error — surfaced inline rather than via a toast
-              so it never disappears before the user has read it. */}
-          <AnimatePresence>
-            {shortenStatus === "error" && shortenError ? (
-              <motion.p
-                key="shorten-error"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                role="alert"
-                className="overflow-hidden text-[11px] text-ember"
-              >
-                {shortenError}
-              </motion.p>
-            ) : null}
-          </AnimatePresence>
 
           <AnimatePresence>
             {qrVisible ? (

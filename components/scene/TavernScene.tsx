@@ -6,6 +6,7 @@ import { Environment, OrbitControls } from "@react-three/drei";
 import { Vector3, type PointLight } from "three";
 import { AssetSlot } from "./AssetSlot";
 import { ProceduralQuestBoard } from "./ProceduralQuestBoard";
+import { GroundDecor } from "./GroundDecor";
 import { SCROLL_LAYOUTS } from "@/lib/scrollLayouts";
 import type { QuestData } from "@/types/quest";
 
@@ -312,6 +313,12 @@ export function TavernScene({
           // Look at the center of the board, not the world origin.
           target={[0, 0, 0]}
         />
+
+        {/* Atmospheric ground decor — dirt floor + grass tufts +
+            stones + drifting fireflies. Pure procedural geometry so
+            no asset cost; deterministic placement so re-renders
+            don't reshuffle the scene. */}
+        <GroundDecor />
 
         <group position={[0, 0, 0]} scale={1}>
           <ProceduralQuestBoard

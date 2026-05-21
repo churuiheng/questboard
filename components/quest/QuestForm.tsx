@@ -114,10 +114,21 @@ export function QuestForm({ value, onChange }: Props) {
           placeholder="Their name…"
           onChange={(e) => patchBundle({ recipientName: e.target.value })}
           className="text-lg"
-          autoFocus
+          // No autoFocus — on mobile this pops the keyboard the
+          // instant the page loads, which fights the entrance
+          // animations and obscures the rest of the form before the
+          // sender has seen what they're filling in. On desktop the
+          // keyboard cost is zero but the focus jump is still
+          // disorienting; leaving it manual makes the form feel
+          // calmer at first paint.
           required
           aria-required="true"
           aria-label="Recipient's name"
+          autoComplete="off"
+          autoCapitalize="words"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="next"
         />
         {value.recipientName.trim().length === 0 ? (
           <p className="mt-1.5 text-[11px] text-parchment/45">

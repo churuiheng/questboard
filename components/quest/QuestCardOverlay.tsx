@@ -225,7 +225,7 @@ export function QuestCardOverlay({
                     className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink-soft"
                   >
                     <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
-                      A message from {quest.senderName.trim() || "the sender"}
+                      A message
                     </span>
                     {quest.note.kind === "image" && quest.note.image ? (
                       <figure className="m-0 mt-1.5">

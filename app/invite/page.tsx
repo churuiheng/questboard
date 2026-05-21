@@ -40,14 +40,16 @@ export async function generateMetadata({
 
   const first = bundleToQuestData(bundle, 0);
   const recipient = bundle.recipientName.trim() || "you";
-  const sender = bundle.senderName.trim() || "a friend";
   const difficultyLabel =
     difficultyOptions.find((d) => d.value === first.difficulty)?.label ?? "";
 
   const titleLine = `${first.title}${
     bundle.options.length > 1 ? ` (+ ${bundle.options.length - 1} more)` : ""
   }`;
-  const description = `${recipient}, ${sender} has summoned you to ${first.activity} — ${first.dateTimeText}. ${
+  // No sender attribution — the From field was removed from the
+  // composer, so the rich-preview description should read as
+  // recipient-focused rather than reciting a (possibly stale) name.
+  const description = `${recipient}, you've been summoned to ${first.activity} — ${first.dateTimeText}. ${
     difficultyLabel ? `Difficulty: ${difficultyLabel}.` : ""
   }`.trim();
 

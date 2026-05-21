@@ -279,10 +279,13 @@ export default function CreatePage() {
 
       {/* Mobile-only floating jump-to-preview button. Below `lg` the
           preview section sits ABOVE the form, but on a tall phone the
-          user scrolls past it as they edit — this brings them back. */}
+          user scrolls past it as they edit — this brings them back.
+          `pb-safe`/`env(safe-area-inset-bottom)` keeps it clear of
+          the iOS home indicator. */}
       <a
         href="#quest-preview"
-        className="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 rounded-full bg-ember px-4 py-2.5 font-display text-[11px] uppercase tracking-[0.18em] text-parchment shadow-[0_8px_24px_-6px_rgba(217,107,52,0.7)] hover:bg-ember-deep lg:hidden"
+        className="fixed right-5 z-30 inline-flex items-center gap-2 rounded-full bg-ember px-4 py-2.5 font-display text-[11px] uppercase tracking-[0.18em] text-parchment shadow-[0_8px_24px_-6px_rgba(217,107,52,0.7)] hover:bg-ember-deep lg:hidden"
+        style={{ bottom: "max(1.25rem, calc(env(safe-area-inset-bottom) + 0.75rem))" }}
         aria-label="Scroll to your quest preview"
       >
         <span aria-hidden>▲</span>
@@ -301,12 +304,11 @@ export default function CreatePage() {
  * placeholders, just no animation.
  */
 function MessageBanner({ quest }: { quest: QuestData }) {
-  const senderLabel = quest.senderName.trim() || "a friend";
   const { note } = quest;
   return (
     <div className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink-soft">
       <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
-        A message from {senderLabel}
+        A message
       </span>
       {note.kind === "image" ? (
         note.image ? (
