@@ -373,8 +373,25 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
           )}
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" size="md" onClick={handleOpen}>
-              Open as recipient ↗
+            {/* Open is gated while auto-shorten is in flight: opening
+                the raw long URL too early can trip Vercel's URL/header
+                size limits (image-note bundles especially) and dumps
+                the recipient on an HTTP error page. Waiting the ~600ms
+                for the short URL guarantees a clean navigation. */}
+            <Button
+              variant="ghost"
+              size="md"
+              onClick={handleOpen}
+              disabled={shortenStatus === "loading"}
+              title={
+                shortenStatus === "loading"
+                  ? "Shortening the link first — opens in a moment."
+                  : undefined
+              }
+            >
+              {shortenStatus === "loading"
+                ? "Preparing…"
+                : "Open as recipient ↗"}
             </Button>
             <Button
               variant="ghost"

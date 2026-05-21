@@ -13,7 +13,6 @@ import { useSfx } from "@/components/scene/useSfx";
 import { decodeQuestBundle } from "@/lib/questCodec";
 import { bundleToQuestData } from "@/lib/questDefaults";
 import { getBundleId } from "@/lib/localResponse";
-import { usePersistedBundleResponse } from "@/lib/usePersistedBundleResponse";
 import { useKonamiCode } from "@/lib/useKonamiCode";
 import type { BundleResponse, QuestBundle } from "@/types/quest";
 
@@ -133,7 +132,14 @@ export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
   const bundleId = getBundleId(bundle);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isCardOpen, setIsCardOpen] = useState(false);
-  const [response, setResponse] = usePersistedBundleResponse(bundleId);
+  // Response lives in component state only — every fresh page load
+  // (refresh, new tab, return-from-history) starts clean. Senders
+  // re-share the same link to ask "what do you think?" and a stale
+  // "you said yes yesterday" banner would short-circuit the question.
+  // We deliberately don't read or write localStorage here. (The old
+  // `usePersistedBundleResponse` hook still exists for any future
+  // callers that want cross-session persistence.)
+  const [response, setResponse] = useState<BundleResponse | null>(null);
 
   // Sound effects — silent no-op when the file isn't present.
   const playScrollOpen = useSfx("/audio/scroll_open.mp3");
