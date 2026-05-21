@@ -13,13 +13,25 @@ import { useSfx } from "@/components/scene/useSfx";
 import { decodeQuestBundle } from "@/lib/questCodec";
 import { bundleToQuestData } from "@/lib/questDefaults";
 import { getBundleId } from "@/lib/localResponse";
+import { decodeSceneStyle } from "@/lib/sceneStyle";
 import { useKonamiCode } from "@/lib/useKonamiCode";
 import type { BundleResponse, QuestBundle } from "@/types/quest";
+import type { SceneStyle } from "@/types/sceneStyle";
 
 export default function InviteScene() {
   const searchParams = useSearchParams();
   const inlineEncoded = searchParams.get("q");
   const stashId = searchParams.get("s");
+  const styleParam = searchParams.get("style");
+
+  // Decode the sender's chosen visual style from `?style=…`. If the
+  // param is missing or malformed, decodeSceneStyle returns null and
+  // TavernScene falls back to the built-in defaults. Memoized on the
+  // raw string so we don't re-parse JSON every render.
+  const sceneStyle = useMemo<SceneStyle | null>(
+    () => decodeSceneStyle(styleParam),
+    [styleParam],
+  );
 
   // Two ways into a quest:
   //   - `?q=<encoded>` — the bundle is right in the URL, decode sync
@@ -87,7 +99,7 @@ export default function InviteScene() {
     return <MissingQuest hasParam={Boolean(inlineEncoded || stashId)} />;
   }
 
-  return <InviteScreen bundle={bundle} />;
+  return <InviteScreen bundle={bundle} sceneStyle={sceneStyle} />;
 }
 
 /**
@@ -128,7 +140,14 @@ function UnrollingScroll() {
   );
 }
 
-export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
+export function InviteScreen({
+  bundle,
+  sceneStyle = null,
+}: {
+  bundle: QuestBundle;
+  /** Optional visual style decoded from `?style=…` on the URL. */
+  sceneStyle?: SceneStyle | null;
+}) {
   const bundleId = getBundleId(bundle);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isCardOpen, setIsCardOpen] = useState(false);
@@ -238,6 +257,7 @@ export function InviteScreen({ bundle }: { bundle: QuestBundle }) {
         firstHintIndex={firstHintVisible ? 0 : null}
         onAnyHover={() => setFirstHintVisible(false)}
         screenAnchorsRef={screenAnchorsRef}
+        style={sceneStyle}
       />
 
       {/* DOM-layer keyboard on-ramp. Tab cycles invisible buttons

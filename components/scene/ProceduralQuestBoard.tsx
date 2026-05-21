@@ -6,6 +6,7 @@ import { Group } from "three";
 import { AssetSlot } from "./AssetSlot";
 import { CustomGLBModel } from "./CustomGLBModel";
 import { ScrollSlot } from "./ScrollSlot";
+import { useToonGradient } from "./SceneStyleContext";
 import { SCROLL_LAYOUTS } from "@/lib/scrollLayouts";
 import type { QuestData } from "@/types/quest";
 
@@ -147,6 +148,13 @@ function ProceduralBoardFrame() {
   const woodDark = "#5a3818";
   const woodMid = "#8a5a2e";
   const woodLight = "#a06a38";
+  // Shared cel-shading ramp so the procedural fallback matches the
+  // toon style applied to the rest of the scene (GroundDecor, the
+  // imported GLB, etc.). MeshToonMaterial discards roughness/metalness
+  // — we keep `color` + `emissive` + `gradientMap` and let the band
+  // texture do the shading work. Sourced via the SceneStyleContext
+  // so /admin/scene tweaks flow through here automatically.
+  const toon = useToonGradient();
 
   return (
     <group>
@@ -154,20 +162,20 @@ function ProceduralBoardFrame() {
       {[-0.95, 0.95].map((x) => (
         <mesh key={x} position={[x, 0, -0.05]} castShadow>
           <boxGeometry args={[0.14, 2.3, 0.14]} />
-          <meshStandardMaterial color={woodDark} roughness={0.85} metalness={0} />
+          <meshToonMaterial color={woodDark} gradientMap={toon} />
         </mesh>
       ))}
 
       {/* Crossbeam */}
       <mesh position={[0, 1.0, -0.05]} castShadow>
         <boxGeometry args={[2.2, 0.18, 0.16]} />
-        <meshStandardMaterial color={woodDark} roughness={0.85} metalness={0} />
+        <meshToonMaterial color={woodDark} gradientMap={toon} />
       </mesh>
 
       {/* Plank */}
       <mesh position={[0, 0, 0]} castShadow>
         <boxGeometry args={[1.9, 1.6, 0.07]} />
-        <meshStandardMaterial color={woodMid} roughness={0.8} metalness={0} />
+        <meshToonMaterial color={woodMid} gradientMap={toon} />
       </mesh>
 
       {/* Iron rivets */}
@@ -183,19 +191,18 @@ function ProceduralBoardFrame() {
           rotation={[Math.PI / 2, 0, 0]}
         >
           <cylinderGeometry args={[0.04, 0.04, 0.025, 12]} />
-          <meshStandardMaterial color="#2a1709" roughness={0.35} metalness={0.7} />
+          <meshToonMaterial color="#2a1709" gradientMap={toon} />
         </mesh>
       ))}
 
       {/* Gold finial */}
       <mesh position={[0, 1.22, -0.05]}>
         <coneGeometry args={[0.18, 0.26, 5]} />
-        <meshStandardMaterial
+        <meshToonMaterial
           color="#e6b352"
           emissive="#e6b352"
           emissiveIntensity={0.25}
-          roughness={0.3}
-          metalness={0.55}
+          gradientMap={toon}
         />
       </mesh>
 
@@ -203,12 +210,11 @@ function ProceduralBoardFrame() {
       {[-0.95, 0.95].map((x) => (
         <mesh key={`sconce-${x}`} position={[x, 1.18, -0.05]}>
           <sphereGeometry args={[0.08, 16, 16]} />
-          <meshStandardMaterial
+          <meshToonMaterial
             color={woodLight}
             emissive="#d96b34"
             emissiveIntensity={0.15}
-            roughness={0.5}
-            metalness={0.2}
+            gradientMap={toon}
           />
         </mesh>
       ))}

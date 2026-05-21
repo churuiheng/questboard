@@ -7,8 +7,10 @@ import { Vector3, type PointLight } from "three";
 import { AssetSlot } from "./AssetSlot";
 import { ProceduralQuestBoard } from "./ProceduralQuestBoard";
 import { GroundDecor } from "./GroundDecor";
+import { SceneStyleProvider } from "./SceneStyleContext";
 import { SCROLL_LAYOUTS } from "@/lib/scrollLayouts";
 import type { QuestData } from "@/types/quest";
+import type { SceneStyle } from "@/types/sceneStyle";
 
 /**
  * Screen-space anchor written into a shared ref by `ScreenProjector`
@@ -174,6 +176,15 @@ type Props = {
    */
   screenAnchorsRef?: React.MutableRefObject<ScrollScreenAnchor[]>;
 
+  /**
+   * Optional visual style override. When provided, the scene applies
+   * the sender's chosen toon stops, outline params, and time-of-day
+   * phase instead of the built-in defaults. Threaded down to every
+   * style-aware child via `<SceneStyleProvider>`. `null` / undefined
+   * means "use defaults" (original behavior).
+   */
+  style?: SceneStyle | null;
+
   className?: string;
 };
 
@@ -201,6 +212,7 @@ export function TavernScene({
   firstHintIndex = null,
   onAnyHover,
   screenAnchorsRef,
+  style,
   className = "",
 }: Props) {
   // When an HDRI is configured we want to dial down the procedural
@@ -216,18 +228,25 @@ export function TavernScene({
   // mid-animation. The camera intro itself lives in <CameraIntro/>.
   const [introDone, setIntroDone] = useState(false);
 
-  // Pick the time-of-day phase once at mount. `prefers-color-scheme:
-  // light` forces "day" so users who've opted into a brighter UI don't
-  // get a midnight tavern. We don't react to clock ticks — the scene
-  // mood that greets the user on open is the mood the whole session
-  // stays in. Server snapshot is "dusk" so SSR + first paint match.
+  // Pick the time-of-day phase. Precedence:
+  //   1. `style.phase` if the sender explicitly chose one in /admin/scene
+  //      (anything other than "auto") — they win.
+  //   2. `prefers-color-scheme: light` forces "day" so light-mode users
+  //      don't get a midnight tavern by surprise.
+  //   3. Wall-clock hour at mount, mapped via phaseForHour.
+  //
+  // Computed once per mount; we don't react to clock ticks because the
+  // mood that greets the user is the mood the session stays in.
+  // SSR snapshot is "dusk" so server + first client paint match.
+  const styledPhase = style?.phase ?? "auto";
   const phase = useMemo<Phase>(() => {
+    if (styledPhase !== "auto") return styledPhase;
     if (typeof window === "undefined") return "dusk";
     if (window.matchMedia?.("(prefers-color-scheme: light)").matches) {
       return "day";
     }
     return phaseForHour(new Date().getHours());
-  }, []);
+  }, [styledPhase]);
   const lights = PHASE_LIGHTS[phase];
 
   // When an HDRI is in play we dial all procedural lights back so the
@@ -249,6 +268,13 @@ export function TavernScene({
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: true }}
       >
+        {/* SceneStyleProvider must live INSIDE the Canvas so r3f
+            components (which are mounted under the Canvas's own
+            renderer context) can read from it via useContext. The
+            provider is a regular React context — it works fine
+            inside r3f. Without a `style` prop it falls back to
+            DEFAULT_SCENE_STYLE, matching pre-customization behavior. */}
+        <SceneStyleProvider style={style}>
         <CameraIntro
           from={[0, 0.55, 10.5]}
           to={[0, 0.2, 5.6]}
@@ -338,6 +364,7 @@ export function TavernScene({
             onAnyHover={onAnyHover}
           />
         </group>
+        </SceneStyleProvider>
       </Canvas>
     </div>
   );

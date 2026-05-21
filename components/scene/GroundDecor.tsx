@@ -3,6 +3,7 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { BufferAttribute, CircleGeometry, Group } from "three";
+import { useToonGradient } from "./SceneStyleContext";
 
 /**
  * Atmospheric decor under and around the quest board: a circular
@@ -44,6 +45,7 @@ export function GroundDecor() {
  * which was reading as a puddle.
  */
 function Floor() {
+  const toon = useToonGradient();
   // Build the geometry imperatively so we can attach a per-vertex
   // alpha that falls off with radius. CircleGeometry lays out one
   // center vertex + N rim vertices; we want the center fully opaque
@@ -79,15 +81,15 @@ function Floor() {
   return (
     <group rotation={[-Math.PI / 2, 0, 0]}>
       <mesh geometry={geometry} receiveShadow>
-        <meshStandardMaterial
-          // Warm mid-brown — reads as dirt under tavern light without
-          // disappearing into shadow. Previously near-black, which
-          // came across as "wet patch" not "floor".
+        <meshToonMaterial
+          // Warm mid-brown — reads as dirt under tavern light. The
+          // cel-shading gradient quantizes the lambert term into a
+          // few bands so the ground reads as illustration rather
+          // than photorealistic dirt.
           color="#6b4a2c"
-          roughness={0.95}
-          metalness={0}
           transparent
           vertexColors
+          gradientMap={toon}
         />
       </mesh>
     </group>
@@ -144,6 +146,9 @@ function generateTufts(count: number): TuftSpec[] {
 }
 
 function Tuft({ x, z, bladeCount, scale, rotation }: TuftSpec) {
+  // Hook at top so the same gradient instance flows into all blades
+  // (cached by stops via SceneStyleContext, so this is cheap).
+  const toon = useToonGradient();
   // Each blade is a thin cone leaning slightly outward from the
   // cluster center, evoking real grass tufts.
   return (
@@ -160,13 +165,12 @@ function Tuft({ x, z, bladeCount, scale, rotation }: TuftSpec) {
             rotation={[Math.cos(ang) * lean, 0, Math.sin(ang) * lean]}
           >
             <coneGeometry args={[0.03, 0.2, 4]} />
-            <meshStandardMaterial
+            <meshToonMaterial
               // Muted olive-brown that reads as dry grass under
-              // warm tavern light, instead of bright green that
-              // pulled focus from the board.
+              // warm tavern light. Toon shading on the cone shape
+              // gives each blade a hand-painted facet look.
               color="#5a4a28"
-              roughness={0.9}
-              metalness={0}
+              gradientMap={toon}
             />
           </mesh>
         );
@@ -182,6 +186,7 @@ function Tuft({ x, z, bladeCount, scale, rotation }: TuftSpec) {
  */
 function Stones() {
   const stones = useMemo(() => generateStones(6), []);
+  const toon = useToonGradient();
   return (
     <group>
       {stones.map((s) => (
@@ -192,13 +197,12 @@ function Stones() {
           scale={s.scale}
         >
           <boxGeometry args={[0.18, 0.1, 0.22]} />
-          <meshStandardMaterial
+          <meshToonMaterial
             // Warm dark stone — close enough to the floor tone that
             // the stones read as part of the earth rather than a
             // separate gray element.
             color="#3a2e22"
-            roughness={0.9}
-            metalness={0.05}
+            gradientMap={toon}
           />
         </mesh>
       ))}

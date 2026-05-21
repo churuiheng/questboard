@@ -8,13 +8,14 @@ import {
   Group,
   MathUtils,
   type MeshBasicMaterial,
-  type MeshStandardMaterial,
+  type MeshToonMaterial,
 } from "three";
 import { AssetSlot } from "./AssetSlot";
 import { CustomGLBModel } from "./CustomGLBModel";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ScrollLabel } from "./ScrollLabel";
 import { useFirstPresentUrl } from "./useAssetExists";
+import { useToonGradient } from "./SceneStyleContext";
 import { getParchmentTexture } from "@/lib/parchmentTexture";
 import { DISPLAY_FONT_CANDIDATES } from "@/lib/fonts";
 import type { QuestData } from "@/types/quest";
@@ -74,6 +75,7 @@ export function ScrollSlot({
   firstHint = false,
 }: SlotProps) {
   const groupRef = useRef<Group>(null);
+  const toon = useToonGradient();
 
   // ── Long-press flip ────────────────────────────────────────────
   // Holding a scroll for 500ms flips it 180° on Y, revealing the
@@ -226,12 +228,11 @@ export function ScrollSlot({
       {highlightNumber !== null && !flipped ? (
         <mesh position={[0, -0.42, 0.02]}>
           <sphereGeometry args={[0.05, 16, 16]} />
-          <meshStandardMaterial
+          <meshToonMaterial
             color="#e6b352"
             emissive="#e6b352"
             emissiveIntensity={0.55}
-            roughness={0.3}
-            metalness={0.3}
+            gradientMap={toon}
           />
         </mesh>
       ) : null}
@@ -388,7 +389,8 @@ function ProceduralScrollVisual({
   rainbow: boolean;
 }) {
   const texture = useMemo(() => getParchmentTexture(), []);
-  const matRef = useRef<MeshStandardMaterial>(null);
+  const matRef = useRef<MeshToonMaterial>(null);
+  const toon = useToonGradient();
   // Stable scratch colors so we don't allocate per-frame.
   const scratch = useMemo(() => new Color(), []);
 
@@ -420,23 +422,28 @@ function ProceduralScrollVisual({
     <group>
       <mesh>
         <planeGeometry args={[0.42, 0.55]} />
-        <meshStandardMaterial
+        <meshToonMaterial
           ref={matRef}
           map={texture}
           emissive="#e6b352"
           emissiveIntensity={hovered ? 0.45 : 0.12}
-          roughness={0.7}
-          metalness={0}
+          gradientMap={toon}
         />
       </mesh>
 
       <mesh position={[0, 0.3, 0.01]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.04, 0.04, 0.46, 14]} />
-        <meshStandardMaterial color="#caa066" roughness={0.55} metalness={0.05} />
+        <meshToonMaterial
+          color="#caa066"
+          gradientMap={toon}
+        />
       </mesh>
       <mesh position={[0, -0.3, 0.01]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.04, 0.04, 0.46, 14]} />
-        <meshStandardMaterial color="#caa066" roughness={0.55} metalness={0.05} />
+        <meshToonMaterial
+          color="#caa066"
+          gradientMap={toon}
+        />
       </mesh>
     </group>
   );

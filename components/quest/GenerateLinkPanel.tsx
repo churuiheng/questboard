@@ -7,6 +7,8 @@ import { encodeQuestBundle } from "@/lib/questCodec";
 import { recordSend } from "@/lib/senderHistory";
 import { shortenUrl } from "@/lib/shortenUrl";
 import { truncateUrl } from "@/lib/truncateUrl";
+import { encodeSceneStyle, loadSceneStyle } from "@/lib/sceneStyle";
+import type { SceneStyle } from "@/types/sceneStyle";
 import { Button } from "@/components/ui/Button";
 import { QrCode } from "./QrCode";
 
@@ -54,12 +56,37 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   >("idle");
   const [shortenError, setShortenError] = useState<string | null>(null);
 
+  // Read the sender's saved scene style once on mount. We don't
+  // subscribe to changes — if the sender hops over to /admin/scene
+  // and tweaks, they'd come back to /create which remounts this
+  // component naturally. Lazy init via state initializer would run
+  // on the server (no localStorage), so we use useEffect instead.
+  const [senderStyle, setSenderStyle] = useState<SceneStyle | null>(null);
+  useEffect(() => {
+    queueMicrotask(() => setSenderStyle(loadSceneStyle()));
+  }, []);
+  // Encoded `?style=` param string, or null when the style matches
+  // defaults (keeps URLs as short as possible for non-customizers).
+  const styleParam = useMemo(
+    () => encodeSceneStyle(senderStyle),
+    [senderStyle],
+  );
+
   const encoded = useMemo(() => encodeQuestBundle(bundle), [bundle]);
-  const link = useMemo(() => buildLink(encoded), [encoded]);
+  const link = useMemo(
+    () => buildLink(encoded, styleParam),
+    [encoded, styleParam],
+  );
   // Display the short link only if it was generated FROM the current
   // encoded bundle — otherwise the short URL points at a stale draft.
-  const displayLink =
-    shortFor && shortFor.encoded === encoded ? shortFor.url : link;
+  // For short URLs, the /api/shorten route only stashes the bundle,
+  // so we re-append the style param client-side so it travels too.
+  const displayLink = useMemo(() => {
+    if (shortFor && shortFor.encoded === encoded) {
+      return appendStyleParam(shortFor.url, styleParam);
+    }
+    return link;
+  }, [shortFor, encoded, link, styleParam]);
   const isCopied = copiedFor === encoded;
   const isShortened = shortFor !== null && shortFor.encoded === encoded;
 
@@ -438,12 +465,27 @@ export function GenerateLinkPanel({ bundle, saveTick = 0 }: Props) {
   );
 }
 
-function buildLink(encoded: string): string {
+function buildLink(encoded: string, styleParam: string | null): string {
   // window.location is only meaningful client-side, which is where this
   // component runs ("use client"). The fallback is unused but keeps TS happy.
   const origin =
     typeof window !== "undefined" ? window.location.origin : "https://questboard.app";
-  return `${origin}/invite?q=${encoded}`;
+  const base = `${origin}/invite?q=${encoded}`;
+  return styleParam ? `${base}&style=${styleParam}` : base;
+}
+
+/**
+ * Append a `?style=…` (or `&style=…`) onto a URL, skipping when no
+ * style param is set or one is already present. Used to keep the
+ * sender's scene style attached to short URLs — the `/api/shorten`
+ * route only stashes the bundle, so it returns `/invite?s=<id>` with
+ * no style. We graft it back on here so recipients see the same look.
+ */
+function appendStyleParam(url: string, styleParam: string | null): string {
+  if (!styleParam) return url;
+  if (url.includes("style=")) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}style=${styleParam}`;
 }
 
 /**
