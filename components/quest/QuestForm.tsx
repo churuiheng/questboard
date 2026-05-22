@@ -115,6 +115,19 @@ export function QuestForm({ value, onChange }: Props) {
         />
       </SectionCard>
 
+      {/* FROM — sender identity. Surfaces on the message banner the
+          recipient sees ("A message from {senderName}"), so the
+          recipient knows who's writing without having to ask. The
+          legacy "A friend" default is treated as a placeholder so a
+          brand-new bundle reads as empty here rather than carrying
+          the generic stand-in into the recipient's view. */}
+      <SectionCard label="From who?">
+        <SenderNameInput
+          value={value.senderName}
+          onChange={(senderName) => patchBundle({ senderName })}
+        />
+      </SectionCard>
+
       {/* QUEST OPTIONS — each is a self-contained mini-editor. Short
           fields sit two-up on a grid so the whole form stays compact
           instead of one long scroll; full-width rows (the quest line,
@@ -300,6 +313,53 @@ export function QuestForm({ value, onChange }: Props) {
       </SectionCard>
 
     </form>
+  );
+}
+
+/* ------------------------------------------------------------ sender */
+
+/**
+ * Plain text input for the sender's name. Treats the legacy default
+ * "A friend" as a placeholder so the field reads as empty even when
+ * the bundle is still using the seeded default — saves the user from
+ * having to delete the stand-in before typing their own name.
+ *
+ * The trimmed value flows through to the recipient's "A message
+ * from {senderName}" banner via `QuestData.senderName`, so what the
+ * sender types here is exactly what the recipient sees.
+ */
+function SenderNameInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const trimmed = value.trim();
+  // "A friend" is the seeded default — show empty in the form so the
+  // sender sees a clean field and types over it instead of an opaque
+  // placeholder they have to clear first.
+  const displayValue = trimmed === "A friend" ? "" : value;
+  return (
+    <div className="flex flex-col gap-2">
+      <TextInput
+        id="quest-sender-input"
+        value={displayValue}
+        maxLength={fieldLimits.senderName}
+        placeholder="Your name…"
+        onChange={(e) => onChange(e.target.value)}
+        className="text-lg"
+        aria-label="Your name (from)"
+        autoComplete="off"
+        autoCapitalize="words"
+        autoCorrect="off"
+        spellCheck={false}
+        enterKeyHint="next"
+      />
+      <p className="text-[11px] text-parchment/45">
+        Signed onto the scroll — appears as &ldquo;A message from {trimmed && trimmed !== "A friend" ? trimmed : "you"}&rdquo; on the recipient&apos;s card.
+      </p>
+    </div>
   );
 }
 

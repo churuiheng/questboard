@@ -26,8 +26,12 @@ export default function Home() {
       />
 
       <header className="mb-12 flex w-full items-center justify-between">
+        {/* Plain wordmark — the ✦ stamp glyph was removed so the
+            header reads as a tavern sign rather than a wax-sealed
+            envelope. The 3D scroll below is doing the seal/parchment
+            work; the header doesn't need to repeat that beat. */}
         <span className="font-display text-sm uppercase tracking-[0.32em] text-gold">
-          ✦ QuestBoard
+          QuestBoard
         </span>
         <Link
           href="/create"

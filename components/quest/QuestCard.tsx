@@ -1,6 +1,5 @@
-import type { QuestData, QuestDifficulty, QuestNote } from "@/types/quest";
+import type { QuestData, QuestNote } from "@/types/quest";
 import { buildMapsUrl } from "@/lib/location";
-import { SEAL_DESIGN } from "@/lib/sealDesign";
 
 type Props = {
   data: QuestData;
@@ -46,15 +45,13 @@ export function QuestCard({ data, variant = "preview", footer }: Props) {
           <Nail className="absolute left-3 bottom-3" />
           <Nail className="absolute right-3 bottom-3" />
 
-          {/* Vibe-tinted wax bead in the upper right — gives the live
-              preview a visual cue for the selected vibe (cozy/normal/
-              legendary/secret) without a textual tag. Only shown in
-              the preview variant; the /invite scene gets a much
-              bigger animated wax stamp on Accept instead, and we
-              don't want a duplicate static stamp on the same face. */}
-          {variant === "preview" ? (
-            <VibeBead difficulty={data.difficulty} />
-          ) : null}
+          {/* (VibeBead — the small wax-seal bead with a ✦ glyph that
+              used to sit in the corner of preview cards — was
+              removed per design feedback. The difficulty signal now
+              flows entirely through the animated wax stamp on Accept
+              and the difficulty-keyed confetti palette, so the
+              static preview seal was duplicating a signal that
+              already lands in the moment that matters.) */}
 
           <Heading value={data.title} placeholder="your quest title" />
 
@@ -404,32 +401,8 @@ function Nail({ className = "" }: { className?: string }) {
   );
 }
 
-/**
- * Small pre-stamped wax bead in the parchment's upper-right corner.
- * Colored by vibe — green for cozy, amber for normal, ember for
- * legendary, indigo for secret. Reuses the same gradient palette as
- * the big animated CornerWaxStamp so the preview reads as "this is
- * the wax color you'll see when accepted."
- *
- * The decorative ✦ glyph at the center matches the one on the
- * accept stamp, but at a much smaller scale (32px vs 64px) so it
- * sits quietly in the corner instead of competing with the title.
- */
-function VibeBead({ difficulty }: { difficulty: QuestDifficulty }) {
-  const design = SEAL_DESIGN[difficulty];
-  return (
-    <div
-      aria-hidden
-      className="absolute right-5 top-5 flex h-8 w-8 -rotate-[14deg] items-center justify-center rounded-full ring-2 shadow-[0_2px_6px_-1px_rgba(0,0,0,0.4),inset_0_1px_3px_rgba(255,255,255,0.25),inset_0_-2px_4px_rgba(0,0,0,0.3)]"
-      style={{
-        backgroundImage: design.gradient,
-        ["--tw-ring-color" as string]: `${design.deep}99`,
-      }}
-      title={design.ariaLabel}
-    >
-      <span className="font-display text-sm font-bold leading-none text-parchment drop-shadow">
-        ✦
-      </span>
-    </div>
-  );
-}
+// (VibeBead was deleted — the static preview seal stamped in the
+//  corner of the card was redundant with the animated wax stamp on
+//  Accept and visually competed with the title. The animated stamp +
+//  difficulty-keyed confetti continue to carry the vibe signal where
+//  it matters.)

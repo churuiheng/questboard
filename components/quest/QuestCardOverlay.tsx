@@ -224,8 +224,14 @@ export function QuestCardOverlay({
                     transition={{ duration: 0.4 }}
                     className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink-soft"
                   >
+                    {/* Eyebrow names the sender so the recipient
+                        sees "A message from Alice" instead of just
+                        a generic "A message" header. We trim and
+                        fall back to "a friend" when the sender
+                        skipped the field — keeps the cadence of the
+                        sentence intact (no dangling "from"). */}
                     <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
-                      A message
+                      A message from {quest.senderName.trim() || "a friend"}
                     </span>
                     {quest.note.kind === "image" && quest.note.image ? (
                       <figure className="m-0 mt-1.5">

@@ -314,8 +314,13 @@ function MessageBanner({ quest }: { quest: QuestData }) {
   const { note } = quest;
   return (
     <div className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink-soft">
+      {/* Eyebrow stays in sync with the recipient's QuestCardOverlay
+          banner — "A message from {senderName}" so the sender can see
+          how the From Who field will read live. Falls back to "a
+          friend" when the sender hasn't filled the field yet so the
+          sentence still scans. */}
       <span className="block font-display text-[10px] uppercase tracking-[0.22em] text-ink-soft/70">
-        A message
+        A message from {quest.senderName.trim() || "a friend"}
       </span>
       {note.kind === "image" ? (
         note.image ? (
